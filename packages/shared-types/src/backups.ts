@@ -9,7 +9,7 @@
 
 /** Backup archive manifest format version. */
 export const BACKUP_FORMAT_VERSION = 1;
-export const BACKUP_KIND = 'openaidy-backup';
+export const BACKUP_KIND = 'aidy-backup';
 
 /** Sections available in a backup. */
 export type BackupSection =
@@ -67,13 +67,13 @@ export type BackupManifest = {
   kind: typeof BACKUP_KIND;
   /** ISO 8601 */
   createdAt: string;
-  openaidyVersion: string;
+  aidyVersion: string;
   sections: Record<BackupSection, BackupSectionSummary>;
   /** Whether heavy workspace folders were included (absent on older backups). */
   includesHeavyFolders?: boolean;
 };
 
-/** Response body of `GET /api/backups/manifest` (live snapshot of OPENAIDY_HOME). */
+/** Response body of `GET /api/backups/manifest` (live snapshot of AIDY_HOME). */
 export type BackupManifestResponse = {
   manifest: BackupManifest;
 };

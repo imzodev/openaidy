@@ -6,7 +6,7 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { McpClientService } from '../../mcp/client';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import type { HandlerContext } from '../index';
 import {
   type WSMessage,
@@ -15,7 +15,7 @@ import {
   type ErrorResponse,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // MCP Response Types

@@ -112,7 +112,7 @@ function createMockValidator(): ManifestValidator {
         return { valid: false, errors: [] };
       }
       const m = manifest as Record<string, unknown>;
-      if (!m.id || !m.name || !m.version || !m.openaidy || !m.entry) {
+      if (!m.id || !m.name || !m.version || !m.aidy || !m.entry) {
         return {
           valid: false,
           errors: [
@@ -142,9 +142,9 @@ function createMockValidator(): ManifestValidator {
       return { result, issues };
     },
 
-    config: { openAidyVersion: '1.0.0' } as any,
+    config: { aidyVersion: '1.0.0' } as any,
     setConfig: () => {},
-    getConfig: () => ({ openAidyVersion: '1.0.0' }),
+    getConfig: () => ({ aidyVersion: '1.0.0' }),
   } as any;
 }
 
@@ -162,7 +162,7 @@ describe('AddonService Integration', () => {
       repository: mockRepo as any,
       validator,
       jwtSecret: 'test-secret',
-      openAidyVersion: '1.0.0',
+      aidyVersion: '1.0.0',
     });
   });
 
@@ -172,7 +172,7 @@ describe('AddonService Integration', () => {
         id: 'test-addon',
         name: 'Test Addon',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: ['sessions.read'],
       };
@@ -193,7 +193,7 @@ describe('AddonService Integration', () => {
         id: 'duplicate-addon',
         name: 'Duplicate',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: [],
       };
@@ -210,7 +210,7 @@ describe('AddonService Integration', () => {
         id: 'no-perm-addon',
         name: 'No Permission Addon',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: [],
       };
@@ -230,7 +230,7 @@ describe('AddonService Integration', () => {
         id: 'enable-test',
         name: 'Enable Test',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: ['sessions.read', 'sessions.write'],
       };
@@ -252,7 +252,7 @@ describe('AddonService Integration', () => {
         id: 'perm-test',
         name: 'Permission Test',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: ['sessions.read'],
       };
@@ -285,7 +285,7 @@ describe('AddonService Integration', () => {
         id: 'disable-test',
         name: 'Disable Test',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: ['sessions.read'],
       };
@@ -312,7 +312,7 @@ describe('AddonService Integration', () => {
         id: 'uninstall-test',
         name: 'Uninstall Test',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: [],
       };
@@ -332,7 +332,7 @@ describe('AddonService Integration', () => {
           id: 'addon-1',
           name: 'Addon 1',
           version: '1.0.0',
-          openaidy: { minVersion: '1.0.0' },
+          aidy: { minVersion: '1.0.0' },
           entry: 'dist/index.js',
           permissions: [],
         },
@@ -344,7 +344,7 @@ describe('AddonService Integration', () => {
           id: 'addon-2',
           name: 'Addon 2',
           version: '1.0.0',
-          openaidy: { minVersion: '1.0.0' },
+          aidy: { minVersion: '1.0.0' },
           entry: 'dist/index.js',
           permissions: [],
         },
@@ -362,7 +362,7 @@ describe('AddonService Integration', () => {
           id: 'status-addon-1',
           name: 'Status Addon 1',
           version: '1.0.0',
-          openaidy: { minVersion: '1.0.0' },
+          aidy: { minVersion: '1.0.0' },
           entry: 'dist/index.js',
           permissions: ['sessions.read'],
         },
@@ -374,7 +374,7 @@ describe('AddonService Integration', () => {
           id: 'status-addon-2',
           name: 'Status Addon 2',
           version: '1.0.0',
-          openaidy: { minVersion: '1.0.0' },
+          aidy: { minVersion: '1.0.0' },
           entry: 'dist/index.js',
           permissions: ['sessions.read'],
         },
@@ -408,7 +408,7 @@ describe('AddonService Integration', () => {
         id: 'get-test',
         name: 'Get Test',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: [],
       };
@@ -427,7 +427,7 @@ describe('AddonService Integration', () => {
         id: 'config-test',
         name: 'Config Test',
         version: '1.0.0',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
         entry: 'dist/index.js',
         permissions: [],
       };

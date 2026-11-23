@@ -1,7 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import { convert } from 'html-to-text';
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { webFetchMeta } from '../catalog.js';
 import { createLogger } from '../../lib/logger.js';
 
@@ -87,7 +87,7 @@ export const webFetchTool: BuiltinTool = {
       response = await fetch(parsed.toString(), {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'OpenAidy/1.0 (web_fetch tool)',
+          'User-Agent': 'Aidy/1.0 (web_fetch tool)',
           Accept:
             'text/html,application/xhtml+xml,application/json,text/plain,*/*',
         },

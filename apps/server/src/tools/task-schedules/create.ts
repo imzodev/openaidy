@@ -1,7 +1,7 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { taskSchedulesCreateMeta } from '../catalog.js';
 import type { TaskScheduleToolDeps } from './types.js';
-import type { CreateTaskScheduleInput } from '@openaidy/shared-types';
+import type { CreateTaskScheduleInput } from '@aidyagent/shared-types';
 import { buildScheduleInput } from './utils.js';
 
 /**

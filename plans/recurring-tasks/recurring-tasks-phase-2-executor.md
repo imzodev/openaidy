@@ -37,7 +37,7 @@ By the end of Phase 2, recurring tasks work end-to-end through the existing API 
 **New file: `apps/server/src/tasks/execution/task-schedule-executor.ts`**
 
 ```ts
-import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+import type { ScheduledRunnable, ExecutionResult } from '@aidyagent/runtime';
 import type {
   TaskSchedule,
   TaskAgent,
@@ -45,9 +45,9 @@ import type {
   TasksRepository,
   SessionsStore,
   TaskAgentsRepository,
-} from '@openaidy/db';
-import type { TaskExecutionHistoryRepository } from '@openaidy/db';
-import type { TaskSchedulesRepository } from '@openaidy/db';
+} from '@aidyagent/db';
+import type { TaskExecutionHistoryRepository } from '@aidyagent/db';
+import type { TaskSchedulesRepository } from '@aidyagent/db';
 import type { SessionMessageService } from '../../sessions/service';
 import type { PlanningService } from '../../planning';
 import type { TaskExecution } from './task-execution';

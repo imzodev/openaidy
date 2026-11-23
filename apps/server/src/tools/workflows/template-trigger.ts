@@ -1,4 +1,4 @@
-import type { ResolvedTemplateTrigger } from '@openaidy/shared-types';
+import type { ResolvedTemplateTrigger } from '@aidyagent/shared-types';
 import type { TaskScheduleService } from '../../tasks/schedule-service';
 import type { WorkflowTriggerService } from '../../tasks/triggers/service';
 

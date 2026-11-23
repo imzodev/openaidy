@@ -4,7 +4,7 @@
  * Analyzes addon package structure, dependencies, and metadata.
  */
 
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 
 // ============================================================================
 // Types

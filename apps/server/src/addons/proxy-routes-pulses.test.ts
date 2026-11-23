@@ -27,7 +27,7 @@ import type {
   JobsStore,
   JobRunsStore,
   SessionsStore,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 const JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
 
@@ -36,7 +36,7 @@ function makeAddonService() {
     repository: null as never,
     validator: null as never,
     jwtSecret: JWT_SECRET,
-    openAidyVersion: '0.0.0',
+    aidyVersion: '0.0.0',
   });
 }
 

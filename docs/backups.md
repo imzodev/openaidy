@@ -1,13 +1,13 @@
 ---
-summary: 'Export your OpenAidy data to a zip and restore it on another server'
+summary: 'Export your Aidy data to a zip and restore it on another server'
 read_when:
-  - You want to back up OpenAidy or move it to a different machine
+  - You want to back up Aidy or move it to a different machine
 title: 'Backups'
 ---
 
 # Backups
 
-**System → Backups** in the web UI exports your OpenAidy data to a single `.zip` file and restores it, on the same server or a different one. Moving to a new machine is: export on the old server, install OpenAidy on the new one, import there.
+**System → Backups** in the web UI exports your Aidy data to a single `.zip` file and restores it, on the same server or a different one. Moving to a new machine is: export on the old server, install Aidy on the new one, import there.
 
 ## What's in a backup
 
@@ -16,7 +16,7 @@ Pick any combination of sections:
 | Section        | Contents                                                     |
 | -------------- | ------------------------------------------------------------ |
 | **Database**   | Agents, sessions and transcripts, tasks, schedules, memories |
-| **Config**     | `openaidy.json`: providers, channels, MCP servers, settings  |
+| **Config**     | `aidy.json`: providers, channels, MCP servers, settings      |
 | **Workspaces** | Every agent's workspace files                                |
 | **Skills**     | Installed skills                                             |
 | **Addons**     | Installed addons                                             |
@@ -45,10 +45,10 @@ This filter only applies to workspaces. Skills and addons are always exported in
 
 ## Importing
 
-1. Install OpenAidy on the target server and log in.
+1. Install Aidy on the target server and log in.
 2. Open **Backups → Import** and choose the `.zip`. The upload shows its progress and can be cancelled.
 3. The page lists what the backup contains. Choose the sections to restore and click **Restore**.
-4. **Restart the server** if you restored the database or config (`openaidy restart`). Those take effect only after a restart. Workspaces, skills and addons are live straight away.
+4. **Restart the server** if you restored the database or config (`aidy restart`). Those take effect only after a restart. Workspaces, skills and addons are live straight away.
 
 Restoring is non-destructive for files: existing files are kept and files with the same path are overwritten. The **database** and **config** sections are replaced as a whole. The new copy is fully extracted and checked before it replaces the old one, so a broken or truncated backup leaves your current data alone.
 
@@ -68,7 +68,7 @@ If your backup goes through a reverse proxy (Caddy, nginx), raise its request-si
 ## Moving to a new server, step by step
 
 1. On the old server: **Backups → Export** with all sections, and download the zip.
-2. On the new server: install OpenAidy, then run `openaidy service install` so it restarts on its own (see [Getting Started](./getting-started.md#keep-it-running-on-a-linux-server)).
-3. On the new server: **Backups → Import** with all sections, then `openaidy restart`.
+2. On the new server: install Aidy, then run `aidy service install` so it restarts on its own (see [Getting Started](./getting-started.md#keep-it-running-on-a-linux-server)).
+3. On the new server: **Backups → Import** with all sections, then `aidy restart`.
 4. Reinstall any workspace dependencies you left out, and log in to your channels again if they ask you to.
 5. **Stop the old server before the new one connects to WhatsApp or Discord.** Two servers with the same channel config both answer every message.

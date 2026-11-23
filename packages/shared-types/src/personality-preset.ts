@@ -6,7 +6,7 @@
  *
  * Mirrors the provider-preset pattern (`providers-preset.ts`): a plain,
  * statically-typed array imported by both server and web from
- * `@openaidy/shared-types`.
+ * `@aidyagent/shared-types`.
  */
 import type { PersonalityFileId } from './personality.js';
 

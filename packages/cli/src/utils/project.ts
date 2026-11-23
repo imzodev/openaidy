@@ -156,15 +156,15 @@ export async function hasPackageManager(): Promise<{
 }
 
 /**
- * Resolve the .openaidy/addons directory by walking up from cwd.
+ * Resolve the .aidy/addons directory by walking up from cwd.
  */
 export function resolveAddonsDir(): string {
-  if (process.env.OPENAIDY_HOME) {
-    return path.join(process.env.OPENAIDY_HOME, 'addons');
+  if (process.env.AIDY_HOME) {
+    return path.join(process.env.AIDY_HOME, 'addons');
   }
   let dir = process.cwd();
   for (let i = 0; i < 8; i++) {
-    const candidate = path.join(dir, '.openaidy');
+    const candidate = path.join(dir, '.aidy');
     if (fs.existsSync(candidate)) {
       return path.join(candidate, 'addons');
     }
@@ -172,16 +172,16 @@ export function resolveAddonsDir(): string {
     if (parent === dir) break;
     dir = parent;
   }
-  return path.join(process.cwd(), '.openaidy', 'addons');
+  return path.join(process.cwd(), '.aidy', 'addons');
 }
 
 /**
  * Resolve which addon project to operate on.
  *
  * Resolution order:
- * 1. If addonName is given, use .openaidy/addons/<addonName>
+ * 1. If addonName is given, use .aidy/addons/<addonName>
  * 2. If cwd itself contains addon.json, use cwd
- * 3. If .openaidy/addons/ has exactly one addon, use it
+ * 3. If .aidy/addons/ has exactly one addon, use it
  * 4. Otherwise return null (caller should list options to user)
  */
 export function resolveAddonProject(addonName?: string): {
@@ -204,7 +204,7 @@ export function resolveAddonProject(addonName?: string): {
     return { path: process.cwd(), name: path.basename(process.cwd()) };
   }
 
-  // Auto-detect from .openaidy/addons/
+  // Auto-detect from .aidy/addons/
   const addonsDir = resolveAddonsDir();
   if (!fs.existsSync(addonsDir)) return null;
   const entries = fs
@@ -226,7 +226,7 @@ export function resolveAddonProject(addonName?: string): {
 }
 
 /**
- * List all addon projects in .openaidy/addons/
+ * List all addon projects in .aidy/addons/
  */
 export function listAddonProjects(): Array<{ path: string; name: string }> {
   const addonsDir = resolveAddonsDir();

@@ -17,7 +17,7 @@ import type {
   DeviceRecord,
   PairingRequestsStore,
   DevicesStore,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { AuthMiddleware } from './middleware/auth';
 import type { Logger } from 'pino';
 

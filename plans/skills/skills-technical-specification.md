@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the internal design and implementation of the OpenAidy Skills system for contributors and developers working on the server codebase.
+This document describes the internal design and implementation of the Aidy Skills system for contributors and developers working on the server codebase.
 
 ---
 
@@ -13,7 +13,7 @@ config/skills/          ← bundled defaults (repo source)
       │
       │  seed on boot (no overwrite)
       ▼
-.openaidy/skills/       ← SKILLS_DIR (runtime)
+.aidy/skills/       ← SKILLS_DIR (runtime)
   git-workflow/
     SKILL.md
   concise-responder/
@@ -169,7 +169,7 @@ updateAgentSkills(agentId: string, skills: string[]): AgentSummary | undefined {
   };
   this.agents.set(agentId, updated);
 
-  // Atomic write to openaidy.json
+  // Atomic write to aidy.json
   if (this.configPath && fs.existsSync(this.configPath)) {
     const raw = JSON.parse(fs.readFileSync(this.configPath, 'utf-8'));
     if (Array.isArray(raw.agents)) {
@@ -246,7 +246,7 @@ const messages = this.buildMessages(
 SKILLS_DIR: z.string().optional(),
 
 // In .transform():
-SKILLS_DIR: value.SKILLS_DIR ?? resolveOpenAidyPath(openAidyHome, 'skills'),
+SKILLS_DIR: value.SKILLS_DIR ?? resolveAidyPath(aidyHome, 'skills'),
 ```
 
 ---

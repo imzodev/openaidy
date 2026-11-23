@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/control-plane",
+  "name": "@aidyagent/control-plane",
   "version": "0.0.1",
   "type": "module",
   "description": "Shared control-plane application layer for admin workflows",
@@ -16,7 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@openaidy/shared-types": "workspace:*"
+    "@aidyagent/shared-types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

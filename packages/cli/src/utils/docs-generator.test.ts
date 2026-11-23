@@ -8,7 +8,7 @@ import path from 'node:path';
 import { generateDocs, validateDocs } from './docs-generator.js';
 
 describe('Docs Generator', () => {
-  const testDir = path.join('/tmp', 'openaidy-docs-test-' + Date.now());
+  const testDir = path.join('/tmp', 'aidy-docs-test-' + Date.now());
 
   beforeEach(() => {
     fs.mkdirSync(testDir, { recursive: true });

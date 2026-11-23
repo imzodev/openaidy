@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/plugin-sdk",
+  "name": "@aidyagent/plugin-sdk",
   "private": true,
   "type": "module",
   "exports": {

@@ -12,7 +12,7 @@
 export function buildScheduleInput(
   schedule: Record<string, unknown>,
 ):
-  | { ok: true; value: import('@openaidy/shared-types').ScheduleInput }
+  | { ok: true; value: import('@aidyagent/shared-types').ScheduleInput }
   | { ok: false; error: string } {
   if (schedule['every']) {
     return {

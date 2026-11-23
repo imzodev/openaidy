@@ -7,7 +7,7 @@ import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { signAssetToken, verifyAssetToken } from '../lib/asset-token';
 import { createAddonService } from '../addons/service';
-import type { AddonsRepository } from '@openaidy/db';
+import type { AddonsRepository } from '@aidyagent/db';
 import type { ManifestValidator } from '../addons/manifest-validator';
 import {
   parseComponentManifest,
@@ -188,7 +188,7 @@ export type AddonRoutesOptions = {
   addonsRepository: AddonsRepository;
   authMiddleware: AuthMiddleware;
   jwtSecret: string;
-  openAidyVersion: string;
+  aidyVersion: string;
   manifestValidator: ManifestValidator;
   storageEngine?: import('../addons/storage/engine').AddonStorageEngine;
 };
@@ -248,7 +248,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     repository: opts.addonsRepository,
     validator: opts.manifestValidator,
     jwtSecret: opts.jwtSecret,
-    openAidyVersion: opts.openAidyVersion,
+    aidyVersion: opts.aidyVersion,
   });
 
   // POST /api/addons - Install new addon
@@ -510,16 +510,16 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     return true;
   };
 
-  // GET /sdk/openaidy-sdk.js - Serve the addon SDK (asset-token gated)
-  app.get('/sdk/openaidy-sdk.js', async (request, reply) => {
+  // GET /sdk/aidy-sdk.js - Serve the addon SDK (asset-token gated)
+  app.get('/sdk/aidy-sdk.js', async (request, reply) => {
     // SDK is shared across addons, so the token need not be addon-bound.
     if (!requireAssetToken(request, reply)) return reply;
 
-    // OPENAIDY_SDK_PATH lets a packaged (bundled) install point at the SDK
+    // AIDY_SDK_PATH lets a packaged (bundled) install point at the SDK
     // shipped in the package; dev/source falls back to the co-located file.
     const sdkPath =
-      process.env['OPENAIDY_SDK_PATH'] ??
-      path.join(__dirname, '../sdk/openaidy-sdk.js');
+      process.env['AIDY_SDK_PATH'] ??
+      path.join(__dirname, '../sdk/aidy-sdk.js');
     if (!fs.existsSync(sdkPath)) {
       return reply.code(404).send({ error: 'SDK not found' });
     }
@@ -531,15 +531,15 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
   });
 
   // GET /sdk/components.json - Serve the sdk.ui.* component manifest, parsed
-  // from @component JSDoc blocks in openaidy-sdk.js. Not asset-token gated —
+  // from @component JSDoc blocks in aidy-sdk.js. Not asset-token gated —
   // this is documentation, not a credential, same as GET /info. Cached after
   // the first parse: the SDK file doesn't change within a server's lifetime.
   let componentManifestCache: ComponentManifest | null = null;
   app.get('/sdk/components.json', async (_request, reply) => {
     if (!componentManifestCache) {
       const sdkPath =
-        process.env['OPENAIDY_SDK_PATH'] ??
-        path.join(__dirname, '../sdk/openaidy-sdk.js');
+        process.env['AIDY_SDK_PATH'] ??
+        path.join(__dirname, '../sdk/aidy-sdk.js');
       if (!fs.existsSync(sdkPath)) {
         return reply.code(404).send({ error: 'SDK not found' });
       }
@@ -563,7 +563,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       if (!requireAssetToken(request, reply, addonId)) return reply;
 
       const filePath = request.params['*'] || 'index.html';
-      const addonsDir = path.join(env.OPENAIDY_HOME, 'addons');
+      const addonsDir = path.join(env.AIDY_HOME, 'addons');
       const fullPath = path.join(addonsDir, addonId, filePath);
 
       // Prevent path traversal

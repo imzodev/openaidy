@@ -1,5 +1,5 @@
 /**
- * Backup routes — export/import of OpenAidy data (issue #451).
+ * Backup routes — export/import of Aidy data (issue #451).
  *
  *   GET    /backups/manifest              — live snapshot of what a full backup would contain
  *   POST   /backups/exports               — start building a backup zip (background job)
@@ -28,7 +28,7 @@ import {
   type BackupManifestResponse,
   type BackupJobResponse,
   type BackupUpload,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { BackupService } from './service';
 import {
   BackupBusyError,
@@ -129,7 +129,7 @@ export const backupRoutes: FastifyPluginAsync<BackupRoutesOptions> = async (
 
       const size = file.sizeBytes;
       const etag = `"${request.params.id}-${size}"`;
-      const filename = `openaidy-backup-${file.createdAt.slice(0, 10)}.zip`;
+      const filename = `aidy-backup-${file.createdAt.slice(0, 10)}.zip`;
       reply
         .header('Content-Type', 'application/zip')
         .header('Content-Disposition', `attachment; filename="${filename}"`)

@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import type { ViewType } from '../components/Sidebar';
-import type { TaskDetailView } from '@openaidy/shared-types';
+import type { TaskDetailView } from '@aidyagent/shared-types';
 
 // Route path constants - single source of truth
 export const RoutePaths = {
@@ -168,7 +168,9 @@ export function createRouter() {
     view: TaskDetailView = 'detail',
   ) => {
     const newPath =
-      view === 'executions' ? `/tasks/${taskId}/executions` : `/tasks/${taskId}`;
+      view === 'executions'
+        ? `/tasks/${taskId}/executions`
+        : `/tasks/${taskId}`;
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
       setCurrentPath(newPath);

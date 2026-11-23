@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RunEventEmitter } from './events.js';
-import type { ChoicesEvent } from '@openaidy/shared-types';
+import type { ChoicesEvent } from '@aidyagent/shared-types';
 
 describe('RunEventEmitter', () => {
   let emitter: RunEventEmitter;

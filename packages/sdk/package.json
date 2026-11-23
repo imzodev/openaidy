@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/sdk",
+  "name": "@aidyagent/sdk",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,7 +11,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@openaidy/shared-types": "workspace:*"
+    "@aidyagent/shared-types": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

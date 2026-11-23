@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createAddon } from './addons/create.js';
 
-const testDir = path.join('/tmp', 'openaidy-cli-test-' + Date.now());
+const testDir = path.join('/tmp', 'aidy-cli-test-' + Date.now());
 
 describe('Create Command', () => {
   beforeEach(() => {
@@ -84,16 +84,16 @@ describe('Create Command', () => {
       expect(js).toContain("postMessage({ type: 'ADDON_READY' }");
     });
 
-    it('index.js should listen for OPENAIDY_INIT and call onSdkReady', async () => {
+    it('index.js should listen for AIDY_INIT and call onSdkReady', async () => {
       await createAddon('MyAddon', { directory: testDir });
       const js = fs.readFileSync(
         path.join(testDir, 'myaddon', 'app', 'index.js'),
         'utf-8',
       );
-      // The listener gates on OPENAIDY_INIT (positive match — the old
+      // The listener gates on AIDY_INIT (positive match — the old
       // negative-match form was rewritten to a positive branch so the
-      // bootstrap could also handle OPENAIDY_THEME_CHANGED).
-      expect(js).toContain("msg.type === 'OPENAIDY_INIT'");
+      // bootstrap could also handle AIDY_THEME_CHANGED).
+      expect(js).toContain("msg.type === 'AIDY_INIT'");
       expect(js).toContain('onSdkReady(msg)');
       expect(js).toContain('function onSdkReady');
     });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ApiRequestError } from '@openaidy/shared-types';
+import { ApiRequestError } from '@aidyagent/shared-types';
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());

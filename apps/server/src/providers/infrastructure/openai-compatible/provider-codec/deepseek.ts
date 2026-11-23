@@ -21,7 +21,7 @@
  * consulted at every request.
  */
 
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 import type {
   ProviderAdapterCodec,
   ToolNameMapping,

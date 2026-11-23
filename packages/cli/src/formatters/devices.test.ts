@@ -12,10 +12,12 @@ import {
   getTimeUntilExpiration,
   formatRequestWithExpiry,
 } from './devices.js';
-import type { PairingRequestData } from '@openaidy/control-plane';
+import type { PairingRequestData } from '@aidyagent/control-plane';
 
 describe('Device Formatters', () => {
-  const createRequest = (overrides?: Partial<PairingRequestData>): PairingRequestData => ({
+  const createRequest = (
+    overrides?: Partial<PairingRequestData>,
+  ): PairingRequestData => ({
     requestId: 'req-123',
     pairingCode: '654321',
     deviceName: 'Test Device',
@@ -127,9 +129,9 @@ describe('Device Formatters', () => {
         createRequest({ requestId: 'old', requestedAt: 1000 }),
         createRequest({ requestId: 'new', requestedAt: 3000 }),
       ];
-      const originalOrder = requests.map(r => r.requestId);
+      const originalOrder = requests.map((r) => r.requestId);
       sortRequestsByDate(requests);
-      const afterOrder = requests.map(r => r.requestId);
+      const afterOrder = requests.map((r) => r.requestId);
 
       expect(originalOrder).toEqual(afterOrder);
     });

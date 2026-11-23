@@ -1,5 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
-import type { ChoicesEvent } from '@openaidy/shared-types';
+import type { ChoicesEvent } from '@aidyagent/shared-types';
 
 /**
  * Run event types

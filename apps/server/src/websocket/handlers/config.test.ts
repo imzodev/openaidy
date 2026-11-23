@@ -20,7 +20,7 @@ import {
   WS_ERROR_CODES,
   type ConfigGetRequest,
   type ConfigUpdateRequest,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mocks

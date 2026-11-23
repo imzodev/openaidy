@@ -6,8 +6,8 @@ import {
 } from './service';
 import { BuiltinToolRegistry } from '../tools/registry';
 import { AgentRegistry } from '../agents/registry';
-import type { BuiltinTool } from '@openaidy/runtime';
-import { ok } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import { ok } from '@aidyagent/runtime';
 import type {
   ProviderRegistryService,
   ProviderSelectionService,
@@ -17,7 +17,7 @@ import type {
   SessionsStore,
   SessionMessagesStore,
   SessionRunsStore,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 /**
  * Unit tests for the builtin tool execution guard in SessionMessageService.

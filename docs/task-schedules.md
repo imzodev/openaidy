@@ -8,7 +8,7 @@ title: 'Task Schedules'
 
 # Task Schedules
 
-A task schedule turns a [task](./tasks.md) into a cron-driven workflow: define the task once, attach a schedule, and OpenAidy re-runs its full lifecycle — planning, subtasks, verification — on every tick. Think of it as a kanban card that walks itself across the board on a timer.
+A task schedule turns a [task](./tasks.md) into a cron-driven workflow: define the task once, attach a schedule, and Aidy re-runs its full lifecycle — planning, subtasks, verification — on every tick. Think of it as a kanban card that walks itself across the board on a timer.
 
 Attach a schedule from the task's **Schedule** tab in the web UI, or via the nested `schedule` field when creating a task through the API.
 

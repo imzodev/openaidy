@@ -20,14 +20,14 @@
  * {@link isSafeToShow}.
  */
 
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import type {
   McpAuthStatus,
   McpSecretField,
   McpSecretValue,
   McpServerRecord,
   McpToolSummary,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { encryptSecret, isEncryptedSecret } from './secret-crypto';
 
 /**

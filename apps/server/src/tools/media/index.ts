@@ -1,5 +1,5 @@
 import type { WorkspaceService } from '../../workspace/service';
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { createMediaShareTool } from './share';
 
 export { createMediaShareTool } from './share';

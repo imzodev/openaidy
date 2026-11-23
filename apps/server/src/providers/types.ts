@@ -2,7 +2,7 @@ import type {
   ModelProvider,
   ProviderCapability,
   ProviderError,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 
 /**
  * Registration options for a provider
@@ -46,7 +46,11 @@ export type ProviderSelectionRequest = {
  * Provider selection result
  */
 export type ProviderSelectionResult =
-  | { readonly ok: true; readonly provider: ModelProvider; readonly modelId: string }
+  | {
+      readonly ok: true;
+      readonly provider: ModelProvider;
+      readonly modelId: string;
+    }
   | { readonly ok: false; readonly error: ProviderError };
 
 /**

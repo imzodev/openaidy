@@ -6,7 +6,7 @@ export const agentsListMeta: ToolMeta = {
   name: 'agents_list',
   category: 'Agents',
   description:
-    'List all enabled agents available in this OpenAidy instance. ' +
+    'List all enabled agents available in this Aidy instance. ' +
     "Returns each agent's id, name, description, model, and the tools, " +
     'skills, and MCP servers it has access to. ' +
     'Use this before creating an addon that invokes an agent, or before ' +
@@ -17,7 +17,7 @@ export const agentsCreateMeta: ToolMeta = {
   name: 'agents_create',
   category: 'Agents',
   description:
-    'Create a new agent and register it in this OpenAidy instance. ' +
+    'Create a new agent and register it in this Aidy instance. ' +
     'The agent is immediately available for use after creation. ' +
     'Use agents_list first to verify the id does not already exist.',
 };
@@ -279,7 +279,7 @@ export const addonCreateMeta: ToolMeta = {
   name: 'addon_create',
   category: 'Addons',
   description:
-    'Scaffold a new OpenAidy addon, register it in the database, and enable it. ' +
+    'Scaffold a new Aidy addon, register it in the database, and enable it. ' +
     'The addon appears in the sidebar immediately — no restart needed. ' +
     'This is the ONLY way to create an addon — never use workspace_write, code_edit, or exec_run to scaffold addon files (addons live in a separate directory the loader will not see otherwise).',
 };
@@ -288,7 +288,7 @@ export const addonUpdateMeta: ToolMeta = {
   name: 'addon_update',
   category: 'Addons',
   description:
-    'Modify an existing OpenAidy addon: overwrite/add/delete its UI files and/or ' +
+    'Modify an existing Aidy addon: overwrite/add/delete its UI files and/or ' +
     'change manifest fields (name, description, version, permissions, externalDomains). ' +
     'Keeps the on-disk addon.json and the database record in sync. ' +
     'This is the ONLY way to update an addon — never use workspace_write, code_edit, or exec_run to patch addon files (the loader will not see changes made outside this tool).',

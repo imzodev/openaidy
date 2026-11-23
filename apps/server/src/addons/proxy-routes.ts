@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { Addon, TaskPriority } from '@openaidy/db';
+import type { Addon, TaskPriority } from '@aidyagent/db';
 import type { AddonProxyRoutesOptions, InvokeAgentBody } from './types';
 import { createAddonProxyService } from '../addons/proxy';
 import { AddonProxyAgentService } from './proxy-agent-service';
@@ -1017,7 +1017,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
       }
 
       await proxyService.recordUsage(request.addonId!, '/pulses');
-      const listInput: import('@openaidy/shared-types').ListPulsesFilters = {
+      const listInput: import('@aidyagent/shared-types').ListPulsesFilters = {
         limit: parsed.limit,
         offset: parsed.offset,
       };
@@ -1085,7 +1085,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
       await proxyService.recordUsage(request.addonId!, '/pulses');
       try {
-        const input: import('@openaidy/shared-types').CreatePulseInput = {
+        const input: import('@aidyagent/shared-types').CreatePulseInput = {
           name: parsed.name,
           prompt: parsed.prompt,
           schedule: toScheduleInput(parsed.schedule),
@@ -1135,7 +1135,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
       await proxyService.recordUsage(request.addonId!, '/pulses/:id');
       try {
-        const input: import('@openaidy/shared-types').UpdatePulseInput = {};
+        const input: import('@aidyagent/shared-types').UpdatePulseInput = {};
         if (parsed.name !== undefined) input.name = parsed.name;
         if (parsed.prompt !== undefined) input.prompt = parsed.prompt;
         if (parsed.schedule !== undefined) {

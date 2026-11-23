@@ -35,17 +35,17 @@ function mockFetchJson(data: unknown, status = 200) {
   ) as unknown as typeof fetch;
 }
 
-const originalServerUrl = process.env.OPENAIDY_SERVER_URL;
+const originalServerUrl = process.env.AIDY_SERVER_URL;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
   mockReadAdminToken.mockResolvedValue({ ok: true, token: 'fake-token' });
-  process.env.OPENAIDY_SERVER_URL = 'http://localhost:3001';
+  process.env.AIDY_SERVER_URL = 'http://localhost:3001';
 });
 
 afterEach(() => {
-  process.env.OPENAIDY_SERVER_URL = originalServerUrl ?? '';
+  process.env.AIDY_SERVER_URL = originalServerUrl ?? '';
 });
 
 const { mcpImportHandler } = await import('./import.js');

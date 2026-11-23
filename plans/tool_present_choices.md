@@ -97,7 +97,7 @@ Responsibilities (Single Responsibility Principle):
 
 ```ts
 import type { NativeTool, NativeToolResult } from './types';
-import type { PresentChoicesArgs } from '@openaidy/shared-types';
+import type { PresentChoicesArgs } from '@aidyagent/shared-types';
 
 export const presentChoicesTool: NativeTool = {
   definition: {

@@ -20,13 +20,13 @@ import {
   type ModelRequest,
   type ModelResponse,
   type ModelStreamEvent,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import {
   type ProviderConfig,
   type SecretProvider,
   type ResolvedProviderConfig,
   createDefaultSecretProvider,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import {
   ProviderConfigService,
   createProviderConfigService,

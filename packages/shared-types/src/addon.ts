@@ -1,5 +1,5 @@
 /**
- * OpenAidy Addon System - Types
+ * Aidy Addon System - Types
  *
  * TypeScript interfaces for the addon manifest and related structures.
  */
@@ -18,7 +18,7 @@ export const AddonAuthorSchema = z.object({
 export type AddonAuthor = z.infer<typeof AddonAuthorSchema>;
 
 /**
- * OpenAidy version compatibility
+ * Aidy version compatibility
  */
 export const AddonVersionConstraintSchema = z.object({
   minVersion: z.string().optional(),
@@ -122,9 +122,9 @@ export const AddonPermissionSchema = z
 export type AddonPermission = z.infer<typeof AddonPermissionSchema>;
 
 /**
- * OpenAidy compatibility section
+ * Aidy compatibility section
  */
-export const AddonOpenAidySchema = z.object({
+export const AddonAidySchema = z.object({
   minVersion: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/, 'Version must be semver format'),
@@ -134,7 +134,7 @@ export const AddonOpenAidySchema = z.object({
     .optional(),
 });
 
-export type AddonOpenAidy = z.infer<typeof AddonOpenAidySchema>;
+export type AddonAidy = z.infer<typeof AddonAidySchema>;
 
 /**
  * Addon storage block — declares the addon's own per-addon SQLite storage.
@@ -211,9 +211,9 @@ export const AddonManifestSchema = z.object({
   $schema: z
     .string()
     .url()
-    .startsWith('https://openaidy.dev/schemas/')
+    .startsWith('https://aidyagent.app/schemas/')
     .optional()
-    .default('https://openaidy.dev/schemas/addon-v1.json'),
+    .default('https://aidyagent.app/schemas/addon-v1.json'),
   id: z
     .string()
     .min(3)
@@ -229,7 +229,7 @@ export const AddonManifestSchema = z.object({
   homepage: z.string().url().optional(),
   repository: z.string().url().optional(),
   license: z.string().max(100).default('MIT'),
-  openaidy: AddonOpenAidySchema,
+  aidy: AddonAidySchema,
   entry: z.string().min(1).max(500),
   permissions: z.array(AddonPermissionSchema).min(0).max(100),
   ui: AddonUIConfigSchema.optional(),
@@ -482,10 +482,10 @@ export type ListAddonsResponse = {
 // Messages the host page posts into the addon's sandboxed iframe. The iframe's
 // `sandbox` attribute strips its origin to `null`, so origin-based checks are
 // unavailable. Each message carries a per-session `nonce` (issued by the host)
-// and the addon echoes it back in every `OPENAIDY_REQUEST` so the host can
+// and the addon echoes it back in every `AIDY_REQUEST` so the host can
 // reject impersonators. The current `theme` is included on init so an addon
 // that follows the host's look is correct on first paint, and is repeated via
-// `OPENAIDY_THEME_CHANGED` whenever the host's theme updates so a user who
+// `AIDY_THEME_CHANGED` whenever the host's theme updates so a user who
 // toggles light/dark while an addon is open sees the change live.
 
 /**
@@ -520,7 +520,7 @@ export type AddonThemePayload = {
  * correctly on the first frame.
  */
 export type AddonInitMessage = {
-  type: 'OPENAIDY_INIT';
+  type: 'AIDY_INIT';
   apiBase: string;
   nonce: string;
   theme: AddonThemePayload;
@@ -533,7 +533,7 @@ export type AddonInitMessage = {
  * addon that didn't expect a live update can still detect it.
  */
 export type AddonThemeMessage = {
-  type: 'OPENAIDY_THEME_CHANGED';
+  type: 'AIDY_THEME_CHANGED';
   theme: AddonThemePayload;
 };
 
@@ -545,18 +545,18 @@ export type AddonHostMessage = AddonInitMessage | AddonThemeMessage;
 
 /**
  * Discriminated union of all addon-to-host messages: `ADDON_READY` (a timing
- * -safety signal), `OPENAIDY_REQUEST` (a proxied fetch, or a media capture
+ * -safety signal), `AIDY_REQUEST` (a proxied fetch, or a media capture
  * request — see the `/media/*` virtual paths in `AddonViewPage`),
- * `ADDON_CSP_VIOLATION`, and `OPENAIDY_MEDIA_STOP` (a fire-and-forget signal
+ * `ADDON_CSP_VIOLATION`, and `AIDY_MEDIA_STOP` (a fire-and-forget signal
  * to end an in-progress `sdk.media.recordAudio()` early — the pending
- * `OPENAIDY_REQUEST`'s response resolves normally once the host actually
+ * `AIDY_REQUEST`'s response resolves normally once the host actually
  * stops, so this has no response of its own). Kept as a single union so the
  * host's `message` handler has one type to narrow on.
  */
 export type AddonIframeMessage =
   | { type: 'ADDON_READY' }
   | {
-      type: 'OPENAIDY_REQUEST';
+      type: 'AIDY_REQUEST';
       requestId: string;
       method: string;
       path: string;
@@ -564,7 +564,7 @@ export type AddonIframeMessage =
       nonce: string;
     }
   | { type: 'ADDON_CSP_VIOLATION'; blockedURI: string; nonce: string }
-  | { type: 'OPENAIDY_MEDIA_STOP'; nonce: string };
+  | { type: 'AIDY_MEDIA_STOP'; nonce: string };
 
 /**
  * Single CSS variable names an addon theme-aware template should expect to

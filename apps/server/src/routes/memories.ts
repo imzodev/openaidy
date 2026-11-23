@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { MemoriesStore } from '@openaidy/db';
-import type { UpdateMemoryInput } from '@openaidy/shared-types';
+import type { MemoriesStore } from '@aidyagent/db';
+import type { UpdateMemoryInput } from '@aidyagent/shared-types';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';

@@ -4,7 +4,7 @@
 
 export { SkillRegistry, createSkillRegistry } from './registry.js';
 // `SkillLoadError` is deliberately not re-exported here — it is part of the
-// shared contract and must be imported from `@openaidy/shared-types`.
+// shared contract and must be imported from `@aidyagent/shared-types`.
 export type { SkillRegistryOptions, SkillSummary } from './registry.js';
 export { parseSkillMd } from './parser.js';
 export type { SkillDefinition, SkillParseError } from './parser.js';

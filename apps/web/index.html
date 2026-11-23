@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenAidy</title>
+    <title>Aidy</title>
     <script>
       (function() {
         const theme = localStorage.getItem('theme') || 'system';
@@ -19,7 +19,7 @@
     </script>
     <script>
       // Recover from a stale build after a server update/restart (self-update,
-      // manual `openaidy start`, or an SSH-triggered reinstall). Asset
+      // manual `aidy start`, or an SSH-triggered reinstall). Asset
       // filenames are content-hashed per build; a restart replaces the whole
       // assets/ directory, so a tab that already has an older index.html
       // cached (HTTP cache, back/forward-cache restore, or just being open
@@ -36,7 +36,7 @@
       // dynamically-imported route chunk going stale mid-session, once the
       // app is already running.
       (function () {
-        var GUARD_KEY = 'openaidy_stale_build_reload';
+        var GUARD_KEY = 'aidy_stale_build_reload';
         window.addEventListener(
           'error',
           function (event) {

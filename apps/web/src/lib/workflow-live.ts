@@ -18,7 +18,7 @@ import {
 import {
   WORKFLOW_UPDATED_EVENT,
   type WorkflowUpdatedPayload,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { useWebSocketContext } from './ws-provider';
 import { listPendingApprovals } from './api-tasks';
 import type { PendingApprovalDto } from './types';

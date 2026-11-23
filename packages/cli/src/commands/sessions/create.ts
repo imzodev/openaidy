@@ -1,7 +1,7 @@
 /**
  * Sessions Create Command Handler
  *
- * Implements `openaidy sessions create <title>` command.
+ * Implements `aidy sessions create <title>` command.
  * Calls POST /sessions via the HTTP REST API.
  */
 
@@ -15,7 +15,7 @@ export async function sessionsCreateHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy sessions create [title]
+      `Usage: aidy sessions create [title]
 
 Create a new session.
 
@@ -23,8 +23,8 @@ Arguments:
   title    Session title (default: "New Session")
 
 Examples:
-  pnpm openaidy sessions create
-  pnpm openaidy sessions create "My Chat"
+  pnpm aidy sessions create
+  pnpm aidy sessions create "My Chat"
 
 Exit Codes:
   0  Success (session created)

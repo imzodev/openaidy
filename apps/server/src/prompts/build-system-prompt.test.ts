@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSystemPrompt } from './build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 import type { SkillRegistry } from '../skills';
 
 function mockPersonality(blank: string[]): AgentPersonalityService {

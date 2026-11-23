@@ -7,7 +7,7 @@ import type {
   PlanningStatus,
   SubtaskStatus,
   AgentRole,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { createLogger } from '../lib/logger';
 import type { TaskScheduleService } from './schedule-service';
 import { TaskOperations } from './operations/task-operations';
@@ -20,13 +20,13 @@ import {
 import type {
   WorkflowGraph,
   WorkflowGraphCheck,
-} from '@openaidy/workflow-templates';
+} from '@aidyagent/workflow-templates';
 import {
   TaskExecution,
   type StartRunOptions,
 } from './execution/task-execution';
-import type { WorkflowRun } from '@openaidy/db';
-import type { WorkflowRunTrigger } from '@openaidy/shared-types';
+import type { WorkflowRun } from '@aidyagent/db';
+import type { WorkflowRunTrigger } from '@aidyagent/shared-types';
 import type {
   TaskServiceOptions,
   CreateTaskInput,

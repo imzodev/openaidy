@@ -10,7 +10,7 @@
  * either failure counts toward the same one-time reload budget.
  */
 
-const GUARD_KEY = 'openaidy_stale_build_reload';
+const GUARD_KEY = 'aidy_stale_build_reload';
 
 export function installStaleBuildRecovery(): void {
   window.addEventListener('vite:preloadError', (event) => {

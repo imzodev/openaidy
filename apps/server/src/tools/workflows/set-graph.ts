@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { TaskService } from '../../tasks/service';
 import { parseGraphSpec } from '../../tasks/graph-spec';
 import { formatToolError, requireService, requireString } from '../shared.js';

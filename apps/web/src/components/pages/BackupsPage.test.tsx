@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, screen, waitFor } from '@solidjs/testing-library';
-import type { BackupJob, BackupManifest } from '@openaidy/shared-types';
+import type { BackupJob, BackupManifest } from '@aidyagent/shared-types';
 
 vi.mock('../../lib/api-backups', () => ({
   getBackupManifest: vi.fn(),
@@ -41,9 +41,9 @@ function job(overrides: Partial<BackupJob> = {}): BackupJob {
 function manifest(): BackupManifest {
   return {
     version: 1,
-    kind: 'openaidy-backup',
+    kind: 'aidy-backup',
     createdAt: '2026-07-21T00:00:00.000Z',
-    openaidyVersion: '0.3.8',
+    aidyVersion: '0.3.8',
     sections: {
       db: { itemCount: 1, sizeBytes: 100 },
       config: { itemCount: 1, sizeBytes: 200 },

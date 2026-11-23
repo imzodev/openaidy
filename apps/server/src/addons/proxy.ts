@@ -1,12 +1,12 @@
 /**
  * Addon Proxy Service
  *
- * Secure intermediary between addons and OpenAidy's internal APIs.
+ * Secure intermediary between addons and Aidy's internal APIs.
  * Enforces permissions, provides audit logging, and rate limiting.
  */
 
 import type { AddonService } from './service';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 import type { ProxyResult } from './types';
 
 /**

@@ -1,6 +1,6 @@
 import { For, Show, createMemo } from 'solid-js';
 import { useWebSocketContext } from '../lib/ws-provider';
-import type { PresenceStatus } from '@openaidy/sdk';
+import type { PresenceStatus } from '@aidyagent/sdk';
 
 type PresenceIndicatorProps = {
   /** Additional CSS classes */

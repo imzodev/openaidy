@@ -13,8 +13,8 @@ import {
   createDatabaseAdapter,
   type DatabaseAdapter,
   type ScheduledJob,
-} from '@openaidy/db';
-import type { OwnerConfig } from '@openaidy/config';
+} from '@aidyagent/db';
+import type { OwnerConfig } from '@aidyagent/config';
 import { createLogger } from '../lib/logger';
 import { PulseService } from '../pulses/service';
 import { createPulseRunnableAdapter } from '../scheduler/pulse-runnable-adapter';
@@ -87,10 +87,10 @@ describe('assistant', { timeout: 20000 }, () => {
   let turns: Array<{ sessionId: string; content: string }>;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-assistant-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-assistant-'));
     db = await createDatabaseAdapter({
       kind: 'sqlite',
-      sqlitePath: join(dir, 'openaidy.db'),
+      sqlitePath: join(dir, 'aidy.db'),
     });
     owner = { ...OWNER };
     sent = [];
@@ -369,7 +369,7 @@ describe('assistant', { timeout: 20000 }, () => {
       expect(sent).toHaveLength(1);
     });
 
-    it('writes the briefing with OpenAidy facts and sends it to the owner', async () => {
+    it('writes the briefing with Aidy facts and sends it to the owner', async () => {
       await syncBriefing(pulses, {
         ...OWNER,
         briefing: {
@@ -452,7 +452,7 @@ describe('assistant', { timeout: 20000 }, () => {
         'Quotes',
       );
       expect(sent.map((s) => s.text)).toEqual([
-        '⏳ "Quotes" needs your approval: Approve quote. Open it in OpenAidy to approve or reject.',
+        '⏳ "Quotes" needs your approval: Approve quote. Open it in Aidy to approve or reject.',
         '⚠️ "Quotes" failed: boom',
       ]);
       owner = { ...OWNER, notifyWorkflowEvents: false };

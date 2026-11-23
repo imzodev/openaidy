@@ -8,8 +8,8 @@
   </Triggers>
   <Actions>
     <Exec>
-      <Command>openaidy-service.bat</Command>
-      <WorkingDirectory>%USERPROFILE%\.config\openaidy</WorkingDirectory>
+      <Command>aidy-service.bat</Command>
+      <WorkingDirectory>%USERPROFILE%\.config\aidy</WorkingDirectory>
     </Exec>
   </Actions>
   <Settings>

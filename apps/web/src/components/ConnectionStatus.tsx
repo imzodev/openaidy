@@ -1,6 +1,6 @@
 import { createMemo, Show } from 'solid-js';
 import { useWebSocketContext } from '../lib/ws-provider';
-import type { WebSocketClientState } from '@openaidy/sdk';
+import type { WebSocketClientState } from '@aidyagent/sdk';
 
 type ConnectionStatusProps = {
   /** Show detailed status text */

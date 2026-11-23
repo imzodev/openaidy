@@ -4,7 +4,7 @@
  * Mock implementations for addon system dependencies in tests.
  */
 
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mock Addon Registry
@@ -217,13 +217,13 @@ export function createMockManifest(
   overrides?: Partial<AddonManifest>,
 ): AddonManifest {
   return {
-    $schema: 'https://openaidy.dev/schemas/addon-v1.json',
+    $schema: 'https://aidyagent.app/schemas/addon-v1.json',
     id: 'mock-addon-' + Math.random().toString(36).slice(2, 9),
     name: 'Mock Addon',
     version: '1.0.0',
     description: 'A mock addon for testing',
     license: 'MIT',
-    openaidy: {
+    aidy: {
       minVersion: '1.0.0',
     },
     entry: 'dist/index.js',

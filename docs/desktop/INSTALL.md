@@ -1,27 +1,27 @@
-# Installing the OpenAidy Desktop App
+# Installing the Aidy Desktop App
 
-The desktop app is a native window (Windows/macOS/Linux) that bundles OpenAidy's
-own server and starts it for you — no terminal, no `openaidy start`. It's built
+The desktop app is a native window (Windows/macOS/Linux) that bundles Aidy's
+own server and starts it for you — no terminal, no `aidy start`. It's built
 from this repo via [Tauri](https://tauri.app/) and published alongside every
 tagged release.
 
 ## Download
 
-Grab the installer for your OS from the [Releases page](https://github.com/imzodev/openaidy/releases/latest):
+Grab the installer for your OS from the [Releases page](https://github.com/imzodev/aidy/releases/latest):
 
-| OS      | File                                                 |
-| ------- | ---------------------------------------------------- |
-| Windows | `OpenAidy_*_x64-setup.exe`                           |
-| macOS   | `OpenAidy_*_universal.dmg` (Intel and Apple Silicon) |
-| Linux   | `.deb` or `.rpm`, whichever matches your distro      |
+| OS      | File                                             |
+| ------- | ------------------------------------------------ |
+| Windows | `Aidy_*_x64-setup.exe`                           |
+| macOS   | `Aidy_*_universal.dmg` (Intel and Apple Silicon) |
+| Linux   | `.deb` or `.rpm`, whichever matches your distro  |
 
 ## First run
 
-The app starts its own copy of the OpenAidy server in the background, then
+The app starts its own copy of the Aidy server in the background, then
 opens the login screen with an admin token already filled in — press
 **Connect** and you're in. All data lives in your OS's per-user app-data
-directory (e.g. `%APPDATA%\openaidy` on Windows, `~/.local/share/openaidy` on
-Linux, `~/Library/Application Support/openaidy` on macOS), the same as the CLI
+directory (e.g. `%APPDATA%\aidy` on Windows, `~/.local/share/aidy` on
+Linux, `~/Library/Application Support/aidy` on macOS), the same as the CLI
 install.
 
 ## Requirements
@@ -59,7 +59,7 @@ macOS and Linux don't have a working in-app updater yet:
 
 - **macOS**: the updater code path is in place, but the release build
   (a universal Intel + Apple Silicon binary via `--target
-  universal-apple-darwin`) doesn't currently produce the signed
+universal-apple-darwin`) doesn't currently produce the signed
   `.app.tar.gz` artifact the updater needs — only the `.dmg` installer.
   Not yet root-caused; tracked as follow-up (see
   `docs/desktop/DEPENDENCIES.md`).
@@ -69,5 +69,5 @@ macOS and Linux don't have a working in-app updater yet:
   CI to ship — see `DEPENDENCIES.md`).
 
 On both, download the latest installer from the
-[Releases page](https://github.com/imzodev/openaidy/releases/latest) and
+[Releases page](https://github.com/imzodev/aidy/releases/latest) and
 install it over your existing one; your data isn't touched.

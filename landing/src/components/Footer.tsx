@@ -15,7 +15,7 @@ export default function Footer() {
         <Link to="/blog">Blog</Link>
         <a href="/docs">Documentation</a>
         <a
-          href="https://github.com/imzodev/openaidy"
+          href="https://github.com/imzodev/aidy"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -23,9 +23,9 @@ export default function Footer() {
         </a>
       </div>
       <p>
-        OpenAidy · Open source ·{' '}
+        Aidy · Open source ·{' '}
         <a
-          href="https://github.com/imzodev/openaidy"
+          href="https://github.com/imzodev/aidy"
           target="_blank"
           rel="noopener noreferrer"
         >

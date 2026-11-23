@@ -224,7 +224,7 @@ export function Showcase() {
       >
         <h2>Built for real workflows</h2>
         <p>
-          From task management to multi-agent orchestration — see OpenAidy in
+          From task management to multi-agent orchestration — see Aidy in
           action.
         </p>
       </motion.div>

@@ -75,7 +75,7 @@ export const scheduleInputSchema = z.discriminatedUnion('kind', [
 // Internal mapping to the existing ScheduleInput type from shared-types
 export function toSharedScheduleInput(
   input: z.infer<typeof scheduleInputSchema>,
-): import('@openaidy/shared-types').ScheduleInput {
+): import('@aidyagent/shared-types').ScheduleInput {
   switch (input.kind) {
     case 'every':
       return { every: input.every };
@@ -370,7 +370,7 @@ await app.register(taskRoutes, {
 
 ### 12. API documentation comment block
 
-Add a documentation header at the top of the routes file (or in a sibling `docs.ts`) following the conventions of `routes/pulses.ts`. This becomes the source of truth for the OpenAidy docs site.
+Add a documentation header at the top of the routes file (or in a sibling `docs.ts`) following the conventions of `routes/pulses.ts`. This becomes the source of truth for the Aidy docs site.
 
 ### 13. Tests
 

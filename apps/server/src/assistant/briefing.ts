@@ -1,4 +1,4 @@
-import type { JobsStore, TasksStore, WorkflowRunsStore } from '@openaidy/db';
+import type { JobsStore, TasksStore, WorkflowRunsStore } from '@aidyagent/db';
 import type { TaskService } from '../tasks/service';
 
 export type BriefingFactsDeps = {
@@ -22,7 +22,7 @@ const dayIn = (date: Date, timeZone: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone }).format(date);
 
 /**
- * What OpenAidy itself knows that belongs in the owner's briefing: what's
+ * What Aidy itself knows that belongs in the owner's briefing: what's
  * waiting on them, what went wrong since yesterday, and what's coming up
  * today. Plain lines, added to the briefing prompt.
  */

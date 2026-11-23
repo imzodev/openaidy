@@ -1,8 +1,8 @@
-# OpenAidy Addons - Technical Specification
+# Aidy Addons - Technical Specification
 
 ## Overview
 
-The OpenAidy Addons system enables third-party developers to create UI extensions that integrate with the OpenAidy platform. Addons are frontend components that communicate with OpenAidy's agent system to provide specialized functionality while maintaining security and isolation.
+The Aidy Addons system enables third-party developers to create UI extensions that integrate with the Aidy platform. Addons are frontend components that communicate with Aidy's agent system to provide specialized functionality while maintaining security and isolation.
 
 ## Architecture Overview
 
@@ -33,7 +33,7 @@ Every addon must include a manifest file that defines its metadata, permissions,
 
 ```json
 {
-  "$schema": "https://openaidy.dev/schemas/addon-v1.json",
+  "$schema": "https://aidyagent.app/schemas/addon-v1.json",
   "id": "price-analyzer",
   "name": "Price Analyzer",
   "version": "1.0.0",
@@ -46,7 +46,7 @@ Every addon must include a manifest file that defines its metadata, permissions,
   "homepage": "https://github.com/example/price-analyzer",
   "repository": "https://github.com/example/price-analyzer.git",
   "license": "MIT",
-  "openaidy": {
+  "aidy": {
     "minVersion": "1.0.0",
     "maxVersion": "2.0.0"
   },
@@ -88,14 +88,14 @@ Every addon must include a manifest file that defines its metadata, permissions,
     }
   },
   "dependencies": {
-    "openaidy": "^1.0.0"
+    "aidy": "^1.0.0"
   }
 }
 ```
 
 ### 2. Permission System
 
-Addons use a scoped permission system that builds on OpenAidy's existing JWT scopes.
+Addons use a scoped permission system that builds on Aidy's existing JWT scopes.
 
 #### Permission Types
 
@@ -158,7 +158,7 @@ CREATE TABLE addon_permission_changes (
 
 ### 4. Addon Proxy Service
 
-The addon proxy acts as a secure intermediary between addons and the rest of OpenAidy.
+The addon proxy acts as a secure intermediary between addons and the rest of Aidy.
 
 #### Responsibilities
 
@@ -191,7 +191,7 @@ The addon loader dynamically loads and manages addon UI components.
 
 #### Addon Runtime API
 
-Addons receive a runtime API that provides secure access to OpenAidy:
+Addons receive a runtime API that provides secure access to Aidy:
 
 ```typescript
 interface AddonRuntime {
@@ -488,7 +488,7 @@ CREATE INDEX idx_addon_usage_addon_id ON addon_usage(addon_id);
 
 ## Conclusion
 
-The addons system provides a secure, extensible platform for third-party developers to build on OpenAidy's capabilities while maintaining security and performance. The phased approach allows for incremental development and testing of each component.
+The addons system provides a secure, extensible platform for third-party developers to build on Aidy's capabilities while maintaining security and performance. The phased approach allows for incremental development and testing of each component.
 
 The key success factors are:
 
@@ -497,4 +497,4 @@ The key success factors are:
 3. **Performance**: Minimal overhead for addon operations
 4. **Flexibility**: Support for diverse addon types and use cases
 
-This specification provides the foundation for building a thriving addon ecosystem around OpenAidy.
+This specification provides the foundation for building a thriving addon ecosystem around Aidy.

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
-  title: 'OpenAidy',
+  title: 'Aidy',
   description: 'Open Source AI Agent Platform — Documentation',
 
   head: [
@@ -45,8 +45,6 @@ export default defineConfig({
       },
     ],
 
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/imzodev/openaidy' },
-    ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/imzodev/aidy' }],
   },
 });

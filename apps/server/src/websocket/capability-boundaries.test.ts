@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AuthMiddleware } from './middleware/auth';
 import { defaultWebSocketConfig } from './types';
-import { WS_CAPABILITIES, type ClientType } from '@openaidy/shared-types';
+import { WS_CAPABILITIES, type ClientType } from '@aidyagent/shared-types';
 
 describe('ClientType Capability Boundaries', () => {
   let authMiddleware: AuthMiddleware;

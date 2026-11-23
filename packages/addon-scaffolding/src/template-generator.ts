@@ -56,8 +56,8 @@ function writeManifest(
     id: opts.id,
     name: opts.name,
     version: '1.0.0',
-    description: opts.description ?? `${opts.name} addon for OpenAidy`,
-    openaidy: { minVersion: '0.0.0' },
+    description: opts.description ?? `${opts.name} addon for Aidy`,
+    aidy: { minVersion: '0.0.0' },
     entry: 'app/index.html',
     permissions: opts.permissions ?? ['agents.list', 'agents.invoke'],
     ui: {
@@ -96,7 +96,7 @@ function writeConfigSchema(projectPath: string): void {
 function writeReadme(projectPath: string, opts: TemplateOptions): void {
   fs.writeFileSync(
     path.join(projectPath, 'README.md'),
-    `# ${opts.name}\n\n${opts.description ?? `${opts.name} addon for OpenAidy`}\n\n## Development\n\nEdit \`app/index.html\` and \`app/index.js\` directly — no build step needed.\n\n## Validate\n\n\`\`\`bash\nopenaidy addon validate\n\`\`\`\n`,
+    `# ${opts.name}\n\n${opts.description ?? `${opts.name} addon for Aidy`}\n\n## Development\n\nEdit \`app/index.html\` and \`app/index.js\` directly — no build step needed.\n\n## Validate\n\n\`\`\`bash\naidy addon validate\n\`\`\`\n`,
   );
 }
 
@@ -110,7 +110,7 @@ const TAILWIND_CDN_TAG =
 //
 // Colors come from the host's theme via CSS custom properties on `:root`.
 // `apps/web/src/index.css` defines the same names (`--bg-primary`, etc.) and
-// the host passes the resolved values down via OPENAIDY_INIT. Referencing the
+// the host passes the resolved values down via AIDY_INIT. Referencing the
 // variables (not hardcoded values) means the addon tracks the host's theme
 // without us having to know which palette the host ships today.
 const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -197,12 +197,12 @@ const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
 // `applyTheme` writes the host's CSS custom properties onto `:root` so the
 // shared stylesheet (which references them) renders the host's palette on
 // first paint. It is called once on init and again on every
-// `OPENAIDY_THEME_CHANGED` postMessage the host sends while the addon is
+// `AIDY_THEME_CHANGED` postMessage the host sends while the addon is
 // loaded, so a user who toggles light/dark in the host sees the addon follow
 // without a reload. A small fallback set is hardcoded so the addon still
 // paints (with the host's dark defaults) when the init message is delayed or
 // the host predates this contract.
-const SHARED_SDK_JS = `// Fallback tokens — used until the host's OPENAIDY_INIT arrives.
+const SHARED_SDK_JS = `// Fallback tokens — used until the host's AIDY_INIT arrives.
 // These intentionally mirror the host's .dark palette in apps/web/src/index.css
 // so an addon that paints before the init message still looks reasonable.
 var FALLBACK_TOKENS = {
@@ -245,12 +245,12 @@ function applyTheme(theme) {
   }
 }
 
-// Signal the parent that this addon is ready to receive OPENAIDY_INIT.
+// Signal the parent that this addon is ready to receive AIDY_INIT.
 // The parent may have already sent it before this script executed, so we
-// also listen for OPENAIDY_THEME_CHANGED so a user who toggles the host's
+// also listen for AIDY_THEME_CHANGED so a user who toggles the host's
 // theme while the addon is open sees the addon follow without a reload.
 // The listener stays registered for the addon's lifetime so a later
-// OPENAIDY_THEME_CHANGED still reaches applyTheme(). Loading the SDK is the
+// AIDY_THEME_CHANGED still reaches applyTheme(). Loading the SDK is the
 // only part gated on the initialised flag — the theme is applied on every
 // themed message, including a repeated init.
 applyTheme({ mode: 'dark', tokens: FALLBACK_TOKENS });
@@ -259,17 +259,17 @@ var initialised = false;
 window.addEventListener('message', function onMessage(event) {
   var msg = event.data;
   if (!msg || typeof msg !== 'object') return;
-  if (msg.type !== 'OPENAIDY_INIT' && msg.type !== 'OPENAIDY_THEME_CHANGED') {
+  if (msg.type !== 'AIDY_INIT' && msg.type !== 'AIDY_THEME_CHANGED') {
     return;
   }
   // Both messages carry the host's current theme. Apply it every time: the
-  // host sends OPENAIDY_INIT twice by design (on iframe load, then again on
+  // host sends AIDY_INIT twice by design (on iframe load, then again on
   // ADDON_READY), and the second one may carry a newer palette than the first.
   applyTheme(msg.theme);
-  if (msg.type === 'OPENAIDY_INIT' && !initialised) {
+  if (msg.type === 'AIDY_INIT' && !initialised) {
     initialised = true;
     var script = document.createElement('script');
-    script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
+    script.src = msg.apiBase + '/sdk/aidy-sdk.js';
     script.onload = function() { onSdkReady(msg); };
     document.head.appendChild(script);
   }
@@ -312,7 +312,7 @@ ${TAILWIND_CDN_TAG}
   <main>
     <div class="card">
       <h2>${opts.name}</h2>
-      <p id="status-el">Connecting to OpenAidy...</p>
+      <p id="status-el">Connecting to Aidy...</p>
     </div>
   </main>
   <script src="index.js"></script>
@@ -330,14 +330,14 @@ ${SHARED_SDK_JS}
 // Show an error if the SDK init message never arrives (e.g. addon not enabled)
 setTimeout(function() {
   if (!_initReceived) {
-    statusEl.textContent = 'Not connected \u2014 make sure the addon is enabled in OpenAidy.';
+    statusEl.textContent = 'Not connected \u2014 make sure the addon is enabled in Aidy.';
     statusEl.style.color = '#f87171';
   }
 }, 5000);
 
 function onSdkReady(msg) {
   _initReceived = true;
-  OpenAidy.ready(function(sdk) {
+  Aidy.ready(function(sdk) {
     statusEl.textContent = 'Connected \u2713';
     statusEl.style.color = '#4ade80';
     // TODO: add your addon logic here using the sdk object.
@@ -438,7 +438,7 @@ function setResponse(text, type) {
 ${SHARED_SDK_JS}
 
 function onSdkReady(msg) {
-  OpenAidy.ready(function(sdk) {
+  Aidy.ready(function(sdk) {
     _sdk = sdk;
     sdk.listAgents().then(function(result) {
       var agents = result.items || result.agents || result || [];

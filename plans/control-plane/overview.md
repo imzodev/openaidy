@@ -4,7 +4,7 @@ The control plane is the shared workflow layer between the CLI and the server.
 
 ## What is the Control Plane?
 
-The control plane (`@openaidy/control-plane`) is a package that contains:
+The control plane (`@aidyagent/control-plane`) is a package that contains:
 
 - Shared workflow logic
 - Domain operations
@@ -266,7 +266,7 @@ enum ErrorCategory {
 
 ```typescript
 const result = failure('REQUEST_NOT_FOUND', 'Request not found', {
-  hint: 'Run `openaidy devices list` to see valid request IDs',
+  hint: 'Run `aidy devices list` to see valid request IDs',
 });
 ```
 

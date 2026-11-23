@@ -1,14 +1,14 @@
 /**
  * Shared Adapter Contract Test Suite
- * 
+ *
  * This module provides a reusable test suite that validates provider adapters
  * behave consistently through the common ModelProvider interface.
- * 
+ *
  * Usage:
  * ```typescript
- * import { describeProviderAdapterContract } from '@openaidy/runtime/adapter-contract';
+ * import { describeProviderAdapterContract } from '@aidyagent/runtime/adapter-contract';
  * import { createMyProvider } from './my-provider';
- * 
+ *
  * describeProviderAdapterContract('MyProvider', {
  *   createProvider: () => createMyProvider({ apiKey: 'test-key' }),
  *   supportedCapabilities: ['text_generation', 'streaming'],
@@ -55,9 +55,10 @@ export type ContractTestResult = {
 /**
  * Validates that a provider descriptor has all required fields
  */
-export function validateProviderDescriptor(
-  descriptor: ProviderDescriptor
-): { valid: boolean; errors: string[] } {
+export function validateProviderDescriptor(descriptor: ProviderDescriptor): {
+  valid: boolean;
+  errors: string[];
+} {
   const errors: string[] = [];
 
   if (!descriptor.id || typeof descriptor.id !== 'string') {
@@ -85,7 +86,10 @@ export function validateProviderDescriptor(
 /**
  * Creates a test request for invoking the provider
  */
-export function createTestRequest(modelId: string, stream = false): ModelRequest {
+export function createTestRequest(
+  modelId: string,
+  stream = false,
+): ModelRequest {
   return {
     model: modelId,
     messages: [
@@ -102,7 +106,11 @@ export function createTestRequest(modelId: string, stream = false): ModelRequest
  * Collects all events from a stream
  */
 export async function collectStreamEvents(
-  stream: AsyncIterable<{ ok: boolean; value?: ModelStreamEvent; error?: unknown }>
+  stream: AsyncIterable<{
+    ok: boolean;
+    value?: ModelStreamEvent;
+    error?: unknown;
+  }>,
 ): Promise<{ events: ModelStreamEvent[]; errors: unknown[] }> {
   const events: ModelStreamEvent[] = [];
   const errors: unknown[] = [];
@@ -120,7 +128,7 @@ export async function collectStreamEvents(
 
 /**
  * Creates the shared adapter contract test suite
- * 
+ *
  * @param providerName Name of the provider (used in test descriptions)
  * @param config Configuration for the tests
  * @param testFn The test function from vitest (describe/it)
@@ -132,7 +140,7 @@ export function describeProviderAdapterContract(
     describe: typeof describe;
     it: typeof it;
     beforeAll: typeof beforeAll;
-  } = { describe, it, beforeAll }
+  } = { describe, it, beforeAll },
 ): void {
   const { describe: d, it: i, beforeAll: b } = testFn;
   const {
@@ -144,7 +152,8 @@ export function describeProviderAdapterContract(
   } = config;
 
   const shouldSkip = (testName: string) => skipTests.includes(testName);
-  const hasCapability = (cap: ProviderCapability) => supportedCapabilities.includes(cap);
+  const hasCapability = (cap: ProviderCapability) =>
+    supportedCapabilities.includes(cap);
 
   d(`${providerName} Adapter Contract`, () => {
     let provider: ModelProvider;
@@ -169,7 +178,7 @@ export function describeProviderAdapterContract(
           expect(validation.valid).toBe(true);
           expect(validation.errors).toHaveLength(0);
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -180,7 +189,7 @@ export function describeProviderAdapterContract(
           expect(provider.descriptor.id).toBeTruthy();
           expect(typeof provider.descriptor.id).toBe('string');
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -191,7 +200,7 @@ export function describeProviderAdapterContract(
           expect(provider.descriptor.name).toBeTruthy();
           expect(typeof provider.descriptor.name).toBe('string');
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -202,7 +211,7 @@ export function describeProviderAdapterContract(
           expect(provider.descriptor.vendorFamily).toBeTruthy();
           expect(typeof provider.descriptor.vendorFamily).toBe('string');
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -213,7 +222,7 @@ export function describeProviderAdapterContract(
           expect(Array.isArray(provider.descriptor.capabilities)).toBe(true);
           expect(provider.descriptor.capabilities.length).toBeGreaterThan(0);
         },
-        timeout
+        timeout,
       );
     });
 
@@ -230,7 +239,7 @@ export function describeProviderAdapterContract(
             expect(provider.hasCapability(capability)).toBe(true);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -248,14 +257,14 @@ export function describeProviderAdapterContract(
             'embedding',
           ];
           const unsupportedCaps = allCaps.filter(
-            (cap) => !supportedCapabilities.includes(cap)
+            (cap) => !supportedCapabilities.includes(cap),
           );
 
           for (const capability of unsupportedCaps) {
             expect(provider.hasCapability(capability)).toBe(false);
           }
         },
-        timeout
+        timeout,
       );
     });
 
@@ -276,7 +285,7 @@ export function describeProviderAdapterContract(
             expect(result.value.length).toBeGreaterThan(0);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -294,7 +303,7 @@ export function describeProviderAdapterContract(
             expect(Array.isArray(model.capabilities)).toBe(true);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -310,7 +319,7 @@ export function describeProviderAdapterContract(
             expect(result.value.providerId).toBe(provider.descriptor.id);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -326,7 +335,7 @@ export function describeProviderAdapterContract(
             expect(result.error.code).toBe('provider.model_not_found');
           }
         },
-        timeout
+        timeout,
       );
     });
 
@@ -352,7 +361,7 @@ export function describeProviderAdapterContract(
             expect(result.value.created).toBeTruthy();
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -369,11 +378,12 @@ export function describeProviderAdapterContract(
             expect(typeof result.value.usage.completionTokens).toBe('number');
             expect(typeof result.value.usage.totalTokens).toBe('number');
             expect(result.value.usage.totalTokens).toBe(
-              result.value.usage.promptTokens + result.value.usage.completionTokens
+              result.value.usage.promptTokens +
+                result.value.usage.completionTokens,
             );
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -385,11 +395,17 @@ export function describeProviderAdapterContract(
           const result = await provider.invoke(request);
 
           if (result.ok) {
-            const validReasons = ['stop', 'length', 'tool_calls', 'content_filter', 'error'];
+            const validReasons = [
+              'stop',
+              'length',
+              'tool_calls',
+              'content_filter',
+              'error',
+            ];
             expect(validReasons).toContain(result.value.finishReason);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -406,7 +422,7 @@ export function describeProviderAdapterContract(
             expect(created.getTime()).not.toBeNaN();
           }
         },
-        timeout
+        timeout,
       );
     });
 
@@ -424,28 +440,34 @@ export function describeProviderAdapterContract(
       i(
         'should successfully stream model output',
         async () => {
-          if (shouldSkip('stream success') || !hasCapability('streaming')) return;
+          if (shouldSkip('stream success') || !hasCapability('streaming'))
+            return;
 
           const request = createTestRequest(defaultModelId, true);
 
-          const { events, errors } = await collectStreamEvents(provider.invokeStream(request));
+          const { events, errors } = await collectStreamEvents(
+            provider.invokeStream(request),
+          );
 
           // Should have at least started and finished events
           expect(events.length).toBeGreaterThan(0);
           expect(errors.length).toBe(0);
           expect(events[0]?.type).toBe('stream.started');
         },
-        timeout
+        timeout,
       );
 
       i(
         'should emit stream.started event first',
         async () => {
-          if (shouldSkip('stream started') || !hasCapability('streaming')) return;
+          if (shouldSkip('stream started') || !hasCapability('streaming'))
+            return;
 
           const request = createTestRequest(defaultModelId, true);
 
-          const { events } = await collectStreamEvents(provider.invokeStream(request));
+          const { events } = await collectStreamEvents(
+            provider.invokeStream(request),
+          );
 
           const startedEvent = events.find((e) => e.type === 'stream.started');
           expect(startedEvent).toBeDefined();
@@ -455,41 +477,55 @@ export function describeProviderAdapterContract(
             expect(startedEvent.providerId).toBe(provider.descriptor.id);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
         'should emit content delta events',
         async () => {
-          if (shouldSkip('stream content delta') || !hasCapability('streaming')) return;
+          if (shouldSkip('stream content delta') || !hasCapability('streaming'))
+            return;
 
           const request = createTestRequest(defaultModelId, true);
 
-          const { events } = await collectStreamEvents(provider.invokeStream(request));
+          const { events } = await collectStreamEvents(
+            provider.invokeStream(request),
+          );
 
-          const contentEvents = events.filter((e) => e.type === 'stream.content_delta');
+          const contentEvents = events.filter(
+            (e) => e.type === 'stream.content_delta',
+          );
           expect(contentEvents.length).toBeGreaterThan(0);
         },
-        timeout
+        timeout,
       );
 
       i(
         'should emit stream.finished event last',
         async () => {
-          if (shouldSkip('stream finished') || !hasCapability('streaming')) return;
+          if (shouldSkip('stream finished') || !hasCapability('streaming'))
+            return;
 
           const request = createTestRequest(defaultModelId, true);
 
-          const { events } = await collectStreamEvents(provider.invokeStream(request));
+          const { events } = await collectStreamEvents(
+            provider.invokeStream(request),
+          );
 
           const lastEvent = events[events.length - 1];
           expect(lastEvent?.type).toBe('stream.finished');
           if (lastEvent && lastEvent.type === 'stream.finished') {
-            const validReasons = ['stop', 'length', 'tool_calls', 'content_filter', 'error'];
+            const validReasons = [
+              'stop',
+              'length',
+              'tool_calls',
+              'content_filter',
+              'error',
+            ];
             expect(validReasons).toContain(lastEvent.finishReason);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -499,7 +535,9 @@ export function describeProviderAdapterContract(
 
           const request = createTestRequest(defaultModelId, true);
 
-          const { events } = await collectStreamEvents(provider.invokeStream(request));
+          const { events } = await collectStreamEvents(
+            provider.invokeStream(request),
+          );
 
           const usageEvent = events.find((e) => e.type === 'stream.usage');
           // Usage event is optional but if present, should have valid data
@@ -509,7 +547,7 @@ export function describeProviderAdapterContract(
             expect(typeof usageEvent.usage.completionTokens).toBe('number');
           }
         },
-        timeout
+        timeout,
       );
     });
 
@@ -530,7 +568,7 @@ export function describeProviderAdapterContract(
             expect(isProviderError(result.error)).toBe(true);
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -548,7 +586,7 @@ export function describeProviderAdapterContract(
             expect(typeof error.retryable).toBe('boolean');
           }
         },
-        timeout
+        timeout,
       );
 
       i(
@@ -563,7 +601,7 @@ export function describeProviderAdapterContract(
             expect(result.error.providerId).toBe(provider.descriptor.id);
           }
         },
-        timeout
+        timeout,
       );
     });
 
@@ -574,7 +612,8 @@ export function describeProviderAdapterContract(
       i(
         'should reject streaming request if not supported',
         async () => {
-          if (shouldSkip('reject streaming') || hasCapability('streaming')) return;
+          if (shouldSkip('reject streaming') || hasCapability('streaming'))
+            return;
 
           const request = createTestRequest(defaultModelId, true);
 
@@ -585,13 +624,14 @@ export function describeProviderAdapterContract(
             expect(result.error.code).toBe('provider.capability_unsupported');
           }
         },
-        timeout
+        timeout,
       );
 
       i(
         'should reject tool calls if not supported',
         async () => {
-          if (shouldSkip('reject tool calls') || hasCapability('tool_calls')) return;
+          if (shouldSkip('reject tool calls') || hasCapability('tool_calls'))
+            return;
 
           const request: ModelRequest = {
             model: defaultModelId,
@@ -612,7 +652,7 @@ export function describeProviderAdapterContract(
             expect(result.error.code).toBe('provider.capability_unsupported');
           }
         },
-        timeout
+        timeout,
       );
     });
   });
@@ -624,7 +664,7 @@ export function describeProviderAdapterContract(
  */
 export async function validateAdapterContract(
   provider: ModelProvider,
-  config: Partial<AdapterContractConfig> = {}
+  config: Partial<AdapterContractConfig> = {},
 ): Promise<ContractTestResult[]> {
   const results: ContractTestResult[] = [];
   const defaultModelId = config.defaultModelId || 'default-model';
@@ -635,7 +675,9 @@ export async function validateAdapterContract(
     results.push({
       passed: validation.valid,
       testName: 'descriptor validation',
-      error: validation.valid ? undefined : new Error(validation.errors.join(', ')),
+      error: validation.valid
+        ? undefined
+        : new Error(validation.errors.join(', ')),
     });
   } catch (e) {
     results.push({

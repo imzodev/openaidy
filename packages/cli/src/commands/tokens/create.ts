@@ -1,14 +1,14 @@
 /**
  * Tokens Create Command Handler
  *
- * Implements `openaidy tokens create` command.
+ * Implements `aidy tokens create` command.
  */
 
 import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 type CreateResponse = {
   key: {
@@ -63,7 +63,7 @@ export async function tokensCreateHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]
+      `Usage: aidy tokens create --name <name> --scopes <scopes> [--expires <date>]
 
 Create a new access token. The raw token is shown once — save it immediately.
 
@@ -87,9 +87,9 @@ Available scopes:
   config.write         Write config
 
 Examples:
-  pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"
-  pnpm openaidy tokens create --name "Admin Key" --scopes "*"
-  pnpm openaidy tokens create --name "Temp" --scopes "sessions.list" --expires "2026-12-31"
+  pnpm aidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"
+  pnpm aidy tokens create --name "Admin Key" --scopes "*"
+  pnpm aidy tokens create --name "Temp" --scopes "sessions.list" --expires "2026-12-31"
 
 Exit Codes:
   0  Token created successfully

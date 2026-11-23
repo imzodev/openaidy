@@ -4,7 +4,7 @@
  * Tracks and logs addon activities for security and compliance.
  */
 
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 // ============================================================================
 // Audit Types

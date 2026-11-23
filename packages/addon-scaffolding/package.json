@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/addon-scaffolding",
+  "name": "@aidyagent/addon-scaffolding",
   "private": true,
   "type": "module",
   "exports": {

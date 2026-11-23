@@ -1,5 +1,5 @@
 /**
- * openaidy-sdk.js is a plain browser IIFE (uses window/document/localStorage
+ * aidy-sdk.js is a plain browser IIFE (uses window/document/localStorage
  * at load time) with no build step of its own — it's served byte-for-byte to
  * every addon iframe. These tests load the real file into a jsdom window via
  * vm.runInContext (jsdom's own eval() doesn't resolve bare `document`/
@@ -13,10 +13,10 @@ import { fileURLToPath } from 'node:url';
 import * as vm from 'node:vm';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { ADDON_THEME_TOKEN_NAMES } from '@openaidy/shared-types';
+import { ADDON_THEME_TOKEN_NAMES } from '@aidyagent/shared-types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SDK_PATH = path.join(__dirname, 'openaidy-sdk.js');
+const SDK_PATH = path.join(__dirname, 'aidy-sdk.js');
 const SDK_SOURCE = readFileSync(SDK_PATH, 'utf-8');
 
 /** Extracts the FALLBACK_THEME_TOKENS object literal without executing the file. */
@@ -80,7 +80,7 @@ function tokenValue(window: SdkWindow, token: string): string {
   return window.document.documentElement.style.getPropertyValue(token);
 }
 
-describe('openaidy-sdk.js theme sync', () => {
+describe('aidy-sdk.js theme sync', () => {
   let originalConsoleLog: typeof console.log;
 
   beforeEach(() => {
@@ -102,11 +102,11 @@ describe('openaidy-sdk.js theme sync', () => {
     expect(fallbackKeys).toEqual(hostKeys);
   });
 
-  it('applies every token and the dark class from a full OPENAIDY_INIT', () => {
+  it('applies every token and the dark class from a full AIDY_INIT', () => {
     const { window } = loadSdk();
     const tokens = extractFallbackThemeTokens();
     postFromHost(window, {
-      type: 'OPENAIDY_INIT',
+      type: 'AIDY_INIT',
       theme: { mode: 'dark', tokens },
     });
 
@@ -116,16 +116,16 @@ describe('openaidy-sdk.js theme sync', () => {
     }
   });
 
-  it('removes the dark class on an OPENAIDY_THEME_CHANGED to light', () => {
+  it('removes the dark class on an AIDY_THEME_CHANGED to light', () => {
     const { window } = loadSdk();
     postFromHost(window, {
-      type: 'OPENAIDY_INIT',
+      type: 'AIDY_INIT',
       theme: { mode: 'dark', tokens: extractFallbackThemeTokens() },
     });
     expect(isDark(window)).toBe(true);
 
     postFromHost(window, {
-      type: 'OPENAIDY_THEME_CHANGED',
+      type: 'AIDY_THEME_CHANGED',
       theme: { mode: 'light', tokens: {} },
     });
     expect(isDark(window)).toBe(false);
@@ -134,7 +134,7 @@ describe('openaidy-sdk.js theme sync', () => {
   it('honors a host token over the fallback, and falls back for one it omits', () => {
     const { window } = loadSdk();
     postFromHost(window, {
-      type: 'OPENAIDY_INIT',
+      type: 'AIDY_INIT',
       theme: { mode: 'dark', tokens: { '--bg-primary': '#ffffff' } },
     });
 
@@ -150,7 +150,7 @@ describe('openaidy-sdk.js theme sync', () => {
     // silently dropped since it's absent from FALLBACK_THEME_TOKENS.
     const { window } = loadSdk();
     postFromHost(window, {
-      type: 'OPENAIDY_INIT',
+      type: 'AIDY_INIT',
       theme: { mode: 'dark', tokens: { '--brand-new-token': '#123456' } },
     });
     expect(tokenValue(window, '--brand-new-token')).toBe('#123456');
@@ -159,7 +159,7 @@ describe('openaidy-sdk.js theme sync', () => {
   it('honors an explicitly emptied token instead of silently reapplying the fallback', () => {
     const { window } = loadSdk();
     postFromHost(window, {
-      type: 'OPENAIDY_INIT',
+      type: 'AIDY_INIT',
       theme: { mode: 'dark', tokens: { '--bg-primary': '' } },
     });
     expect(tokenValue(window, '--bg-primary')).toBe('');
@@ -171,7 +171,7 @@ describe('openaidy-sdk.js theme sync', () => {
       const { window } = loadSdk();
       expect(() =>
         postFromHost(window, {
-          type: 'OPENAIDY_INIT',
+          type: 'AIDY_INIT',
           theme: { mode: 'dark', tokens: malformed },
         }),
       ).not.toThrow();
@@ -189,7 +189,7 @@ describe('openaidy-sdk.js theme sync', () => {
     const foreignSource = { fake: 'not window.parent' };
     window.dispatchEvent(
       new window.MessageEvent('message', {
-        data: { type: 'OPENAIDY_INIT', theme: { mode: 'dark', tokens: {} } },
+        data: { type: 'AIDY_INIT', theme: { mode: 'dark', tokens: {} } },
         source: foreignSource as unknown as MessageEventSource,
       }),
     );
@@ -212,13 +212,13 @@ describe('openaidy-sdk.js theme sync', () => {
     expect(isDark(window)).toBe(true);
   });
 
-  it('does not touch localStorage for the initial paint, and still exposes window.OpenAidy', () => {
+  it('does not touch localStorage for the initial paint, and still exposes window.Aidy', () => {
     // Regression test: the addon iframe is sandboxed WITHOUT
     // allow-same-origin, so *accessing* localStorage throws a SecurityError
     // synchronously (not just returns undefined). jsdom's own localStorage
     // doesn't model that, so this simulates it directly — if any code path
     // in the SDK still touched localStorage at load time, this would throw
-    // before `global.OpenAidy = sdk` (the file's last statement) ever runs,
+    // before `global.Aidy = sdk` (the file's last statement) ever runs,
     // exactly like the real bug reported in production.
     const { window, vmContext } = loadSdk((w) => {
       w.matchMedia = () => ({ matches: false });
@@ -231,9 +231,7 @@ describe('openaidy-sdk.js theme sync', () => {
         },
       });
     });
-    expect(
-      (vmContext as unknown as { OpenAidy?: unknown }).OpenAidy,
-    ).toBeDefined();
+    expect((vmContext as unknown as { Aidy?: unknown }).Aidy).toBeDefined();
     expect(isDark(window)).toBe(false);
   });
 });

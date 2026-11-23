@@ -959,4 +959,4 @@ After completing all 6 phases, the WebSocket control plane will be fully impleme
    - Performance benchmarks
    - Deployment guide
 
-The WebSocket control plane will provide a robust, scalable, and well-documented foundation for real-time communication in OpenAidy, similar to OpenClaw's Gateway.
+The WebSocket control plane will provide a robust, scalable, and well-documented foundation for real-time communication in Aidy, similar to OpenClaw's Gateway.

@@ -1,7 +1,7 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { taskSchedulesListExecutionsMeta } from '../catalog.js';
 import type { TaskScheduleToolDeps } from './types.js';
-import type { TaskExecutionHistoryStatus } from '@openaidy/shared-types';
+import type { TaskExecutionHistoryStatus } from '@aidyagent/shared-types';
 
 /**
  * List execution history for a task's schedule.

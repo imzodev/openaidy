@@ -15,7 +15,7 @@ import {
 } from './project.js';
 
 // Test directory setup
-const testDir = path.join('/tmp', 'openaidy-test-' + Date.now());
+const testDir = path.join('/tmp', 'aidy-test-' + Date.now());
 const projectPath = path.join(testDir, 'test-project');
 
 describe('Project Utilities', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mcpServerConfigSchema } from '@openaidy/config';
+import { mcpServerConfigSchema } from '@aidyagent/config';
 import { MCP_CATALOG, catalogServerConfig, findCatalogEntry } from './catalog';
 
 describe('MCP catalog', () => {

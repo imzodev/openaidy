@@ -12,7 +12,7 @@ import {
   WS_ERROR_CODES,
   type WSErrorCode,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Error Code Mappings
@@ -149,21 +149,33 @@ export class WSErrorHandler {
       return { code: WS_ERROR_CODES.AUTH_FAILED, message: error.message };
     }
 
-    if (errorMessage.includes('token expired') || errorMessage.includes('jwt expired')) {
+    if (
+      errorMessage.includes('token expired') ||
+      errorMessage.includes('jwt expired')
+    ) {
       return { code: WS_ERROR_CODES.TOKEN_EXPIRED, message: error.message };
     }
 
-    if (errorMessage.includes('invalid token') || errorMessage.includes('jwt invalid')) {
+    if (
+      errorMessage.includes('invalid token') ||
+      errorMessage.includes('jwt invalid')
+    ) {
       return { code: WS_ERROR_CODES.TOKEN_INVALID, message: error.message };
     }
 
     // Authorization errors
-    if (errorMessage.includes('forbidden') || errorMessage.includes('access denied')) {
+    if (
+      errorMessage.includes('forbidden') ||
+      errorMessage.includes('access denied')
+    ) {
       return { code: WS_ERROR_CODES.FORBIDDEN, message: error.message };
     }
 
     if (errorMessage.includes('capa') || errorMessage.includes('permission')) {
-      return { code: WS_ERROR_CODES.INSUFFICIENT_CAPABILITY, message: error.message };
+      return {
+        code: WS_ERROR_CODES.INSUFFICIENT_CAPABILITY,
+        message: error.message,
+      };
     }
 
     // Validation errors
@@ -179,12 +191,18 @@ export class WSErrorHandler {
       return { code: WS_ERROR_CODES.NOT_FOUND, message: error.message };
     }
 
-    if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+    if (
+      errorMessage.includes('already exists') ||
+      errorMessage.includes('duplicate')
+    ) {
       return { code: WS_ERROR_CODES.ALREADY_EXISTS, message: error.message };
     }
 
     // Rate limiting
-    if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
+    if (
+      errorMessage.includes('rate limit') ||
+      errorMessage.includes('too many')
+    ) {
       return { code: WS_ERROR_CODES.RATE_LIMITED, message: error.message };
     }
 

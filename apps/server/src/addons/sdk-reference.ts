@@ -1,7 +1,7 @@
 /**
  * Addon SDK Reference — Single Source of Truth
  *
- * This file describes every method exposed by `openaidy-sdk.js` to addon UIs.
+ * This file describes every method exposed by `aidy-sdk.js` to addon UIs.
  * It is the ONLY place where the SDK surface is documented in TypeScript.
  *
  * Consumer responsibilities:
@@ -11,7 +11,7 @@
  *                            comments / stubs.
  *  - Any future introspection endpoint → reads SDK_METHODS directly.
  *
- * When you add a new method to openaidy-sdk.js:
+ * When you add a new method to aidy-sdk.js:
  *  1. Add it here (one entry).
  *  2. That's it. All consumers update automatically.
  */
@@ -463,7 +463,7 @@ export const SDK_METHODS: readonly SdkMethod[] = [
   // ── UI (Tailwind-styled component library) ─────────────────────────────────
   // Pure client-side DOM builders — no proxyPath/httpMethod (no server
   // round-trip) and no requiredPermission (nothing to gate). Every entry
-  // mirrors the @component JSDoc above the method in openaidy-sdk.js; see
+  // mirrors the @component JSDoc above the method in aidy-sdk.js; see
   // GET /sdk/components.json for the machine-readable version of the same data.
   {
     name: 'ui.card',
@@ -996,7 +996,7 @@ export function renderSdkReference(): string {
     byCategory.get(method.category)!.push(method);
   }
 
-  const lines: string[] = ['## OpenAidy Addon SDK Reference', ''];
+  const lines: string[] = ['## Aidy Addon SDK Reference', ''];
   for (const [category, methods] of byCategory) {
     lines.push(`### ${category}`, '');
     for (const m of methods) {

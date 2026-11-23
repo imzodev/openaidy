@@ -1,6 +1,6 @@
 import { For } from 'solid-js';
-import type { BackupManifest, BackupSection } from '@openaidy/shared-types';
-import { BACKUP_SECTIONS } from '@openaidy/shared-types';
+import type { BackupManifest, BackupSection } from '@aidyagent/shared-types';
+import { BACKUP_SECTIONS } from '@aidyagent/shared-types';
 import { formatBytes } from '../../lib/api-backups';
 
 const SECTION_LABELS: Record<BackupSection, string> = {

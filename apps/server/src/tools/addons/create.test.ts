@@ -8,9 +8,9 @@ describe('addon_create tool', () => {
   let addonsDir: string;
   let tool: ReturnType<typeof createAddonCreateTool>;
 
-  const VALID_HTML = `<!DOCTYPE html><html><body><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>`;
+  const VALID_HTML = `<!DOCTYPE html><html><body><script src="/sdk/aidy-sdk.js"></script><script src="index.js"></script></body></html>`;
   const VALID_JS = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-OpenAidy.ready(function(sdk) {});`;
+Aidy.ready(function(sdk) {});`;
 
   const VALID_ARGS = {
     id: 'my-addon',
@@ -68,8 +68,8 @@ OpenAidy.ready(function(sdk) {});`;
     expect(tool.description).toContain(
       "window.parent.postMessage({ type: 'ADDON_READY' }, '*');",
     );
-    expect(tool.description).toContain('/sdk/openaidy-sdk.js');
-    expect(tool.description).toContain('OpenAidy.ready(function(sdk)');
+    expect(tool.description).toContain('/sdk/aidy-sdk.js');
+    expect(tool.description).toContain('Aidy.ready(function(sdk)');
   });
 
   it('requires id, name, description, permissions, files', () => {
@@ -213,7 +213,7 @@ OpenAidy.ready(function(sdk) {});`;
           ...VALID_ARGS,
           files: {
             'app/index.html':
-              '<!DOCTYPE html><html><body><script src="index.js"></script><script src="/sdk/openaidy-sdk.js"></script></body></html>',
+              '<!DOCTYPE html><html><body><script src="index.js"></script><script src="/sdk/aidy-sdk.js"></script></body></html>',
             'app/index.js': VALID_JS,
           },
         },
@@ -225,7 +225,7 @@ OpenAidy.ready(function(sdk) {});`;
 
   it('rejects undeclared external fetch() domains', async () => {
     const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-OpenAidy.ready(function(sdk) {
+Aidy.ready(function(sdk) {
   fetch('https://api.example.com/data').then(r => r.json());
 });`;
     expectError(
@@ -242,7 +242,7 @@ OpenAidy.ready(function(sdk) {
 
   it('accepts external fetch() when domain is declared in externalDomains', async () => {
     const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-OpenAidy.ready(function(sdk) {
+Aidy.ready(function(sdk) {
   fetch('https://api.example.com/data').then(r => r.json());
 });`;
     const result = await tool.execute(
@@ -336,8 +336,8 @@ OpenAidy.ready(function(sdk) {
     // written verbatim.
     expect(html).toBe(
       VALID_HTML.replace(
-        '<script src="/sdk/openaidy-sdk.js">',
-        '<script src="https://cdn.tailwindcss.com"></script>\n  <script src="/sdk/openaidy-sdk.js">',
+        '<script src="/sdk/aidy-sdk.js">',
+        '<script src="https://cdn.tailwindcss.com"></script>\n  <script src="/sdk/aidy-sdk.js">',
       ),
     );
   });
@@ -351,14 +351,14 @@ OpenAidy.ready(function(sdk) {
     const html = fs.readFileSync(htmlPath, 'utf-8');
     expect(html).toContain('<script src="https://cdn.tailwindcss.com">');
     expect(html.indexOf('cdn.tailwindcss.com')).toBeLessThan(
-      html.indexOf('/sdk/openaidy-sdk.js'),
+      html.indexOf('/sdk/aidy-sdk.js'),
     );
   });
 
   it('does not duplicate the Tailwind tag if the agent already included it', async () => {
     const htmlWithTailwind = VALID_HTML.replace(
-      '<script src="/sdk/openaidy-sdk.js">',
-      '<script src="https://cdn.tailwindcss.com"></script><script src="/sdk/openaidy-sdk.js">',
+      '<script src="/sdk/aidy-sdk.js">',
+      '<script src="https://cdn.tailwindcss.com"></script><script src="/sdk/aidy-sdk.js">',
     );
     await tool.execute(
       {
@@ -385,7 +385,7 @@ OpenAidy.ready(function(sdk) {
 
   it('keeps agent-declared externalDomains alongside the auto-added Tailwind host', async () => {
     const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-OpenAidy.ready(function(sdk) {
+Aidy.ready(function(sdk) {
   fetch('https://api.example.com/data').then(r => r.json());
 });`;
     await tool.execute(
@@ -467,7 +467,7 @@ OpenAidy.ready(function(sdk) {
       sessionId: 'test-session',
     });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.content).toContain('openaidy addon install');
+    if (result.ok) expect(result.content).toContain('aidy addon install');
   });
 
   it('calls addonService.installAddon and enableAddon when provided', async () => {

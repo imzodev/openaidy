@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { taskSchedulesDeleteMeta } from '../catalog.js';
 import type { TaskScheduleToolDeps } from './types.js';
 

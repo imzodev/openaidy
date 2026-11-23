@@ -1,7 +1,7 @@
 /**
  * Tasks Get Command Handler
  *
- * Implements `openaidy tasks get <id>` command.
+ * Implements `aidy tasks get <id>` command.
  */
 
 import * as p from '@clack/prompts';
@@ -9,12 +9,12 @@ import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { formatTaskDetail } from '../../formatters/tasks.js';
 import type { CommandResult } from '../../types.js';
-import type { TaskWithDetails } from '@openaidy/shared-types';
+import type { TaskWithDetails } from '@aidyagent/shared-types';
 
 export async function tasksGetHandler(args: string[]): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tasks get <id>
+      `Usage: aidy tasks get <id>
 
 Get full details for a specific task.
 
@@ -22,7 +22,7 @@ Arguments:
   <id>    Task ID (required)
 
 Examples:
-  pnpm openaidy tasks get abc123
+  pnpm aidy tasks get abc123
 
 Exit Codes:
   0  Success
@@ -47,7 +47,7 @@ Exit Codes:
   }
 
   if (positional.length === 0) {
-    const msg = 'Task ID is required.\nUsage: openaidy tasks get <id>';
+    const msg = 'Task ID is required.\nUsage: aidy tasks get <id>';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }

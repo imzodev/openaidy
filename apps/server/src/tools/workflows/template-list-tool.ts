@@ -1,5 +1,5 @@
-import type { BuiltinTool } from '@openaidy/runtime';
-import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import { WORKFLOW_TEMPLATES } from '@aidyagent/workflow-templates';
 import { workflowTemplateListMeta } from '../catalog.js';
 
 /**

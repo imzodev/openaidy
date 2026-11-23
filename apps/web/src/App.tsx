@@ -63,7 +63,7 @@ import {
   type AddonRecord,
 } from './lib/api';
 import { ProviderOnboarding } from './components/onboarding/ProviderOnboarding';
-import type { ChoicesEvent } from '@openaidy/shared-types';
+import type { ChoicesEvent } from '@aidyagent/shared-types';
 import { ChoicesCard } from './components/ChoicesCard';
 import { PausedRunNotice } from './components/PausedRunNotice';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
@@ -1088,7 +1088,7 @@ function AppContent(props: AppContentProps) {
 
   // Re-run recent-tracking whenever the selected session changes. Waits for
   // `sessionQuery` to resolve *for this session id* before recording, so a
-  // private (ephemeral) chat is never written to the `openaidy_recent_items`
+  // private (ephemeral) chat is never written to the `aidy_recent_items`
   // localStorage key — that would survive a refresh and defeat the "gone on
   // refresh" guarantee private chats are supposed to have.
   createEffect(() => {
@@ -1173,7 +1173,7 @@ function AppContent(props: AppContentProps) {
 
               <div class="min-w-0">
                 <div class="flex items-center gap-2 text-xs font-medium text-text-tertiary">
-                  <span class="hidden sm:inline">OpenAidy</span>
+                  <span class="hidden sm:inline">Aidy</span>
                   <span class="hidden sm:inline">/</span>
                   <span class="inline-flex items-center gap-1.5">
                     <Show
@@ -1402,7 +1402,7 @@ function AppContent(props: AppContentProps) {
               <div class="flex-1 flex items-center justify-center">
                 <div class="text-center">
                   <h1 class="text-2xl font-bold text-text-primary mb-2">
-                    Welcome to OpenAidy
+                    Welcome to Aidy
                   </h1>
                   <p class="text-text-secondary mb-4">
                     Select a session or create a new one to start chatting

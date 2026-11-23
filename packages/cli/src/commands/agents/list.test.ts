@@ -18,7 +18,7 @@ vi.mock('@clack/prompts', () => mockClack);
 
 import { agentsListHandler } from './list.js';
 
-const OPENAIDY_CONFIG = {
+const AIDY_CONFIG = {
   version: 1,
   agents: [
     {
@@ -99,7 +99,7 @@ describe('agents list', () => {
 
   describe('successful list', () => {
     beforeEach(() => {
-      mockReadFile.mockResolvedValue(JSON.stringify(OPENAIDY_CONFIG));
+      mockReadFile.mockResolvedValue(JSON.stringify(AIDY_CONFIG));
     });
 
     it('shows enabled agents', async () => {

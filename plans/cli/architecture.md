@@ -4,7 +4,7 @@ This guide explains the CLI architecture and package boundaries for contributors
 
 ## Overview
 
-The OpenAidy CLI follows a layered architecture that separates concerns:
+The Aidy CLI follows a layered architecture that separates concerns:
 
 - **CLI Layer** - Command parsing, help output, user interaction
 - **Control Plane** - Shared workflow logic, domain operations
@@ -13,7 +13,7 @@ The OpenAidy CLI follows a layered architecture that separates concerns:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      CLI Package                             │
-│  (@openaidy/cli)                                            │
+│  (@aidyagent/cli)                                            │
 │                                                              │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
 │  │  Commands   │  │  Formatters │  │   Errors    │         │
@@ -24,7 +24,7 @@ The OpenAidy CLI follows a layered architecture that separates concerns:
           ▼                │
 ┌─────────────────────────┼──────────────────────────────────┐
 │                 Control Plane                               │
-│  (@openaidy/control-plane)                                 │
+│  (@aidyagent/control-plane)                                 │
 │                                                             │
 │  ┌──────────────────┐  ┌──────────────────┐               │
 │  │  PairingWorkflow │  │ BootstrapAdmin   │               │
@@ -40,7 +40,7 @@ The OpenAidy CLI follows a layered architecture that separates concerns:
           ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                     Server Package                          │
-│  (@openaidy/server)                                         │
+│  (@aidyagent/server)                                         │
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │   Fastify    │  │   Pairing    │  │   Persistence│     │
@@ -51,7 +51,7 @@ The OpenAidy CLI follows a layered architecture that separates concerns:
 
 ## Package Responsibilities
 
-### `@openaidy/cli` - CLI Package
+### `@aidyagent/cli` - CLI Package
 
 **Purpose:** Command-line interface for local administration.
 
@@ -74,7 +74,7 @@ The OpenAidy CLI follows a layered architecture that separates concerns:
 ```
 packages/cli/
 ├── bin/
-│   └── openaidy.ts        # Entry point
+│   └── aidy.ts        # Entry point
 ├── src/
 │   ├── commands/
 │   │   ├── index.ts       # Command registry
@@ -86,7 +86,7 @@ packages/cli/
 └── package.json
 ```
 
-### `@openaidy/control-plane` - Control Plane Package
+### `@aidyagent/control-plane` - Control Plane Package
 
 **Purpose:** Shared workflow layer for CLI and future consumers.
 
@@ -117,7 +117,7 @@ packages/control-plane/
 └── package.json
 ```
 
-### `@openaidy/server` - Server Package
+### `@aidyagent/server` - Server Package
 
 **Purpose:** HTTP/WebSocket server with persistence.
 
@@ -301,8 +301,8 @@ import { devicesShowHandler } from './devices/show.js';
 
 registerCommand('devices show', devicesShowHandler, {
   description: 'Show details of a pairing request',
-  usage: 'openaidy devices show <request-id>',
-  examples: ['pnpm openaidy devices show abc123'],
+  usage: 'aidy devices show <request-id>',
+  examples: ['pnpm aidy devices show abc123'],
 });
 ```
 
@@ -351,7 +351,7 @@ function mapWorkflowError(error: WorkflowError): CLIError {
       return createCLIError('Request not found', {
         category: 'REQUEST_NOT_FOUND',
         exitCode: 3,
-        hint: 'Run `openaidy devices list` to see valid request IDs',
+        hint: 'Run `aidy devices list` to see valid request IDs',
       });
     // ...
   }

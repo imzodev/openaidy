@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 
-import type { ProviderPreset } from '@openaidy/shared-types';
+import type { ProviderPreset } from '@aidyagent/shared-types';
 
 import type {
   BuildRequestHook,
@@ -103,7 +103,7 @@ export type ProviderProfileInput = z.input<typeof providerProfileSchema>;
  * `ProviderPreset` entry. Profile classes pass these alongside the
  * preset to `ProviderProfile.fromPreset()` to build the final
  * `ProviderProfileInput`. Keeps `PROVIDER_PRESETS` (in
- * `@openaidy/shared-types`) as the single source of truth for
+ * `@aidyagent/shared-types`) as the single source of truth for
  * provider identity, base URL, and model list, while letting each
  * profile add its own auth-method quirks (e.g. Anthropic's
  * `x-api-key` validation, custom `defaultHeaders`).
@@ -345,7 +345,7 @@ export class ProviderProfile {
    * Return the available authentication methods for this provider.
    * Override in subclass to define auth methods.
    */
-  getAvailableAuthMethods(): import('@openaidy/shared-types').AuthMethod[] {
+  getAvailableAuthMethods(): import('@aidyagent/shared-types').AuthMethod[] {
     return [{ type: 'api_key', label: 'API Key' }];
   }
 
@@ -397,7 +397,7 @@ export class ProviderProfile {
    * Return undefined if provider doesn't support device code flow.
    */
   getDeviceCodeInfo():
-    | import('@openaidy/shared-types').DeviceCodeResponse
+    | import('@aidyagent/shared-types').DeviceCodeResponse
     | undefined {
     return undefined;
   }

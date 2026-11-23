@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { createPulsesListTool } from './list.js';
 import { createPulsesCreateTool } from './create.js';
 import { createPulsesUpdateTool } from './update.js';

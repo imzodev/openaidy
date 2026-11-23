@@ -1,7 +1,7 @@
 /**
  * Subtasks Fail Command Handler
  *
- * Implements `openaidy subtasks fail <subtaskId>` command.
+ * Implements `aidy subtasks fail <subtaskId>` command.
  */
 
 import * as p from '@clack/prompts';
@@ -14,7 +14,7 @@ export async function subtasksFailHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy subtasks fail <subtaskId> [--reason <reason>]
+      `Usage: aidy subtasks fail <subtaskId> [--reason <reason>]
 
 Mark a subtask as failed.
 
@@ -25,8 +25,8 @@ Options:
   --reason <r>   Failure reason / error message (optional)
 
 Examples:
-  pnpm openaidy subtasks fail abc123
-  pnpm openaidy subtasks fail abc123 --reason "API rate limit exceeded"
+  pnpm aidy subtasks fail abc123
+  pnpm aidy subtasks fail abc123 --reason "API rate limit exceeded"
 
 Exit Codes:
   0  Success
@@ -56,7 +56,7 @@ Exit Codes:
 
   if (positional.length === 0) {
     const msg =
-      'Subtask ID is required.\nUsage: openaidy subtasks fail <subtaskId>';
+      'Subtask ID is required.\nUsage: aidy subtasks fail <subtaskId>';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }

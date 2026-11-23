@@ -6,10 +6,10 @@ import type {
   AgentIdentity,
   McpServerRef,
   PersonalityFileId,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import { PERSONALITY_FILES } from '../agents/personality-service';
-import { AGENT_PERSONALITY_PRESETS } from '@openaidy/shared-types';
+import { AGENT_PERSONALITY_PRESETS } from '@aidyagent/shared-types';
 import { IdentitySchema } from '../agents/schema';
 import { requireAuth } from '../middleware/require-auth';
 

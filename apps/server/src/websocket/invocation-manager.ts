@@ -17,7 +17,7 @@ import {
   type NodeRpcError,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Types

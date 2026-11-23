@@ -21,7 +21,7 @@ export type RecentAgent = {
   name: string;
 };
 
-const STORAGE_KEY = 'openaidy_recent_items';
+const STORAGE_KEY = 'aidy_recent_items';
 const MAX_ITEMS = 5;
 
 type StoredState = {

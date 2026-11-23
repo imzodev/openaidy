@@ -5,7 +5,7 @@ import {
   type ModelStreamEvent,
   type ProviderResult,
   err,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { ProviderRegistryService } from './registry';
 import type { ProviderSelectionService } from './selection';
 import { repairProviderHistory } from './history-repair.js';

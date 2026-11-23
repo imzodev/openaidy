@@ -1,4 +1,4 @@
-import type { JobsStore, SessionsStore } from '@openaidy/db';
+import type { JobsStore, SessionsStore } from '@aidyagent/db';
 import type { PulseService } from '../../pulses/service.js';
 
 /**

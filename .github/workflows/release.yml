@@ -2,8 +2,8 @@ name: Release
 
 # Cut a release by pushing a semver tag:
 #   git tag v0.2.0 && git push origin v0.2.0
-# Gates on the same checks as CI, publishes the prebuilt `openaidy` package to
-# npm, then publishes a GitHub Release. The installer runs `npm i -g openaidy`,
+# Gates on the same checks as CI, publishes the prebuilt `@aidyagent/app` package to
+# npm, then publishes a GitHub Release. The installer runs `npm i -g @aidyagent/app`,
 # so a green publish here is what users install.
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
         run: pnpm -r test
 
   publish-npm:
-    name: Publish @openaidy/app to npm
+    name: Publish @aidyagent/app to npm
     needs: gate
     runs-on: ubuntu-latest
     permissions:
@@ -184,9 +184,9 @@ jobs:
         # forwarding involved, so the args actually arrive as typed.
         run: |
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
-            pnpm --filter @openaidy/desktop exec tauri build --target universal-apple-darwin
+            pnpm --filter @aidyagent/desktop exec tauri build --target universal-apple-darwin
           else
-            pnpm --filter @openaidy/desktop exec tauri build
+            pnpm --filter @aidyagent/desktop exec tauri build
           fi
       # OS-unsigned build: Windows will show a SmartScreen warning, macOS will
       # refuse to open the app until the user right-click's > Open (Gatekeeper

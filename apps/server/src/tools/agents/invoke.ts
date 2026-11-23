@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { AgentToolsDeps } from './index.js';
 import { agentsInvokeMeta, agentsInvokeAwaitMeta } from '../catalog.js';
 

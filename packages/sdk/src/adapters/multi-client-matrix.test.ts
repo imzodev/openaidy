@@ -14,7 +14,7 @@ import { CLIAdapter, createCLIAdapter } from './cli.js';
 import { MobileAdapter, createMobileAdapter } from './mobile.js';
 import { ChannelAdapter, createChannelAdapter } from './channel.js';
 import type { ClientAdapter } from './types.js';
-import { WS_CAPABILITIES } from '@openaidy/shared-types';
+import { WS_CAPABILITIES } from '@aidyagent/shared-types';
 
 // Mock WebSocket for client tests
 class MockWebSocket {

@@ -1,7 +1,7 @@
 /**
  * Tasks Delete Command Handler
  *
- * Implements `openaidy tasks delete <id>` command.
+ * Implements `aidy tasks delete <id>` command.
  */
 
 import * as p from '@clack/prompts';
@@ -14,7 +14,7 @@ export async function tasksDeleteHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tasks delete <id>
+      `Usage: aidy tasks delete <id>
 
 Delete a task permanently.
 
@@ -22,7 +22,7 @@ Arguments:
   <id>    Task ID (required)
 
 Examples:
-  pnpm openaidy tasks delete abc123
+  pnpm aidy tasks delete abc123
 
 Exit Codes:
   0  Success
@@ -47,7 +47,7 @@ Exit Codes:
   }
 
   if (positional.length === 0) {
-    const msg = 'Task ID is required.\nUsage: openaidy tasks delete <id>';
+    const msg = 'Task ID is required.\nUsage: aidy tasks delete <id>';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }

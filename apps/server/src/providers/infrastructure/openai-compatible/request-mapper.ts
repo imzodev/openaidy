@@ -4,7 +4,7 @@
  * Maps normalized internal requests to OpenAI-compatible API payloads.
  */
 
-import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
+import type { Message, ModelRequest, ToolDefinition } from '@aidyagent/runtime';
 import type {
   OpenAIMessage,
   OpenAIChatCompletionRequest,

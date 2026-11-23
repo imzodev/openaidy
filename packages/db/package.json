@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/db",
+  "name": "@aidyagent/db",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,7 +11,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@openaidy/shared-types": "workspace:*",
+    "@aidyagent/shared-types": "workspace:*",
     "drizzle-orm": "^0.41.0",
     "nanoid": "^5.0.9",
     "pg": "^8.20.0",

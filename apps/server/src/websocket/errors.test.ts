@@ -6,7 +6,7 @@ import {
   WSErrorClass,
   ERROR_MESSAGES,
 } from './errors';
-import { WS_ERROR_CODES, type WSError } from '@openaidy/shared-types';
+import { WS_ERROR_CODES, type WSError } from '@aidyagent/shared-types';
 import type { FastifyBaseLogger } from 'fastify';
 
 // Mock logger

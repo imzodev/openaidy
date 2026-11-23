@@ -1,6 +1,6 @@
 # WebSocket Integration Guide
 
-This guide explains how to integrate the OpenAidy WebSocket gateway with various types of applications.
+This guide explains how to integrate the Aidy WebSocket gateway with various types of applications.
 
 ## Integration Patterns
 
@@ -12,7 +12,7 @@ This guide explains how to integrate the OpenAidy WebSocket gateway with various
 <!DOCTYPE html>
 <html>
   <head>
-    <title>OpenAidy Chat</title>
+    <title>Aidy Chat</title>
   </head>
   <body>
     <div id="messages"></div>
@@ -21,7 +21,7 @@ This guide explains how to integrate the OpenAidy WebSocket gateway with various
 
     <script>
       const ws = new WebSocket(
-        `wss://api.openaidy.com/ws?token=${localStorage.getItem('token')}`,
+        `wss://api.aidyagent.app/ws?token=${localStorage.getItem('token')}`,
       );
 
       ws.onopen = () => {
@@ -74,11 +74,11 @@ This guide explains how to integrate the OpenAidy WebSocket gateway with various
 #### Using the SDK
 
 ```typescript
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
 // Initialize client
 const client = createWebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
   token: localStorage.getItem('token'),
   autoReconnect: true,
 });
@@ -107,7 +107,7 @@ async function sendMessage(sessionId, content) {
 
 ```typescript
 import { useEffect, useState, useRef } from 'react';
-import { createWebSocketClient, WebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient, WebSocketClient } from '@aidyagent/sdk';
 
 function useWebSocket(url: string, token: string) {
   const clientRef = useRef<WebSocketClient | null>(null);
@@ -130,7 +130,7 @@ function useWebSocket(url: string, token: string) {
 }
 
 function ChatComponent({ token }) {
-  const { client, connected } = useWebSocket('wss://api.openaidy.com/ws', token);
+  const { client, connected } = useWebSocket('wss://api.aidyagent.app/ws', token);
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState(null);
 
@@ -187,7 +187,7 @@ function ChatComponent({ token }) {
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
 const props = defineProps(['token']);
 
@@ -199,7 +199,7 @@ const sessionId = ref(null);
 
 onMounted(async () => {
   client.value = createWebSocketClient({
-    url: 'wss://api.openaidy.com/ws',
+    url: 'wss://api.aidyagent.app/ws',
     token: props.token,
   });
 
@@ -240,7 +240,7 @@ async function sendMessage() {
 ```typescript
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { createWebSocketClient, WebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient, WebSocketClient } from '@aidyagent/sdk';
 
 function useWebSocket(url: string, token: string) {
   const clientRef = useRef<WebSocketClient | null>(null);
@@ -285,7 +285,7 @@ function useWebSocket(url: string, token: string) {
 // Usage in component
 function ChatScreen() {
   const { client, connected } = useWebSocket(
-    'wss://api.openaidy.com/ws',
+    'wss://api.aidyagent.app/ws',
     userToken,
   );
 
@@ -397,7 +397,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
 
 // Usage
 let client = WebSocketClient(
-    url: URL(string: "wss://api.openaidy.com/ws")!,
+    url: URL(string: "wss://api.aidyagent.app/ws")!,
     token: "your-jwt-token"
 )
 client.connect()
@@ -489,7 +489,7 @@ interface WebSocketEventListener {
 
 // Usage
 val client = WebSocketClient(
-    url = "wss://api.openaidy.com/ws",
+    url = "wss://api.aidyagent.app/ws",
     token = "your-jwt-token",
     listener = object : WebSocketEventListener {
         override fun onConnected() {
@@ -516,18 +516,18 @@ client.connect()
 
 ```typescript
 #!/usr/bin/env node
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 import * as readline from 'readline';
 
 async function main() {
-  const token = process.env.OPENAIDY_TOKEN;
+  const token = process.env.AIDY_TOKEN;
   if (!token) {
-    console.error('Set OPENAIDY_TOKEN environment variable');
+    console.error('Set AIDY_TOKEN environment variable');
     process.exit(1);
   }
 
   const client = createWebSocketClient({
-    url: process.env.OPENAIDY_WS_URL || 'wss://api.openaidy.com/ws',
+    url: process.env.AIDY_WS_URL || 'wss://api.aidyagent.app/ws',
     token,
     logger: {
       info: (msg) => console.error(`[INFO] ${msg}`),
@@ -553,7 +553,7 @@ async function main() {
   });
 
   await client.connect();
-  console.log('Connected to OpenAidy');
+  console.log('Connected to Aidy');
 
   // Create session
   const session = await client.createSession({
@@ -602,9 +602,9 @@ main().catch(console.error);
 #### Backend Service
 
 ```typescript
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
-class OpenAidyService {
+class AidyService {
   private client;
   private connected = false;
 
@@ -631,7 +631,7 @@ class OpenAidyService {
 
   async processMessage(content: string, context?: Record<string, unknown>) {
     if (!this.connected) {
-      throw new Error('Not connected to OpenAidy');
+      throw new Error('Not connected to Aidy');
     }
 
     // Create session for this request
@@ -653,7 +653,7 @@ class OpenAidyService {
 
   async *streamMessage(content: string, context?: Record<string, unknown>) {
     if (!this.connected) {
-      throw new Error('Not connected to OpenAidy');
+      throw new Error('Not connected to Aidy');
     }
 
     const session = await this.client.createSession({
@@ -701,8 +701,8 @@ class OpenAidyService {
 }
 
 // Usage
-const service = new OpenAidyService({
-  url: 'wss://api.openaidy.com/ws',
+const service = new AidyService({
+  url: 'wss://api.aidyagent.app/ws',
   token: process.env.SERVICE_TOKEN!,
 });
 
@@ -738,7 +738,7 @@ for await (const chunk of service.streamMessage('Tell me a story')) {
 **1. Install SDK**
 
 ```bash
-npm install @openaidy/sdk
+npm install @aidyagent/sdk
 ```
 
 **2. Replace REST Client**
@@ -753,10 +753,10 @@ const response = await fetch('/api/sessions', {
 const session = await response.json();
 
 // After (WebSocket)
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
 const client = createWebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
   token,
 });
 await client.connect();
@@ -790,7 +790,7 @@ fetch('/api/sessions', {
 
 // WebSocket: Token in connection URL
 const client = createWebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
   token, // Sent once during connection
 });
 ```
@@ -846,7 +846,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 // ✅ Good: SecureStore for sensitive tokens
-await SecureStore.setItemAsync('openaidy_token', token);
+await SecureStore.setItemAsync('aidy_token', token);
 
 // ❌ Bad: AsyncStorage is not encrypted
 await AsyncStorage.setItem('token', token);
@@ -857,12 +857,12 @@ await AsyncStorage.setItem('token', token);
 ```typescript
 // ✅ Always use wss:// in production
 const client = createWebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
 });
 
 // ❌ Never use ws:// in production
 const client = createWebSocketClient({
-  url: 'ws://api.openaidy.com/ws', // Unencrypted!
+  url: 'ws://api.aidyagent.app/ws', // Unencrypted!
 });
 ```
 
@@ -979,7 +979,7 @@ await client.subscribeToSession(sessionId);
 
 ```typescript
 const client = createWebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
   token,
   logger: {
     info: (msg, data) => console.log(`[INFO] ${msg}`, data),

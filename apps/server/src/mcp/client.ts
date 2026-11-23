@@ -13,8 +13,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { FastifyBaseLogger } from 'fastify';
-import type { McpServerConfig } from '@openaidy/config';
-import type { McpAuthStatus } from '@openaidy/shared-types';
+import type { McpServerConfig } from '@aidyagent/config';
+import type { McpAuthStatus } from '@aidyagent/shared-types';
 import {
   McpAuthRequiredError,
   usesOAuth,
@@ -295,7 +295,7 @@ export class McpClientService {
 
     // Create the MCP client
     const client = new Client(
-      { name: `openaidy-${id}`, version: '1.0.0' },
+      { name: `aidy-${id}`, version: '1.0.0' },
       {
         capabilities: {},
       },
@@ -405,7 +405,7 @@ export class McpClientService {
 
       // Create the MCP client
       const client = new Client(
-        { name: `openaidy-${id}`, version: '1.0.0' },
+        { name: `aidy-${id}`, version: '1.0.0' },
         {
           capabilities: {},
         },

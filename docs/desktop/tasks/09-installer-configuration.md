@@ -8,7 +8,7 @@ Configure the Tauri bundler to produce installers for all three platforms from a
 
 1. `pnpm tauri build` produces `.deb`, `.dmg`, `.exe`/`.msi` from the same code
 2. Each installer includes proper app metadata (name, version, icon, description)
-3. Installers register file associations (`.openaidy` project files)
+3. Installers register file associations (`.aidy` project files)
 4. Uninstaller cleanly removes service + app + config (user data optional)
 5. Code signing is configured (with placeholder certs for now)
 
@@ -21,7 +21,7 @@ None — pure Tauri bundler configuration.
 ```
 apps/desktop/src-tauri/tauri.conf.json           ← UPDATE: Full bundle config
 apps/desktop/src-tauri/bundle/                   ← NEW: Per-OS configs
-apps/desktop/scripts/openaidy-service.sh         ← MODIFY: Better wrapper
+apps/desktop/scripts/aidy-service.sh         ← MODIFY: Better wrapper
 ```
 
 ## Implementation Steps
@@ -32,9 +32,9 @@ Update the `bundle` section in `apps/desktop/src-tauri/tauri.conf.json`:
 
 ```json
 {
-  "productName": "OpenAidy",
+  "productName": "Aidy",
   "version": "0.1.0",
-  "identifier": "dev.openaidy",
+  "identifier": "app.aidyagent",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -46,7 +46,7 @@ Update the `bundle` section in `apps/desktop/src-tauri/tauri.conf.json`:
     "windows": [
       {
         "label": "main",
-        "title": "OpenAidy",
+        "title": "Aidy",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
@@ -71,12 +71,12 @@ Update the `bundle` section in `apps/desktop/src-tauri/tauri.conf.json`:
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["scripts/openaidy-service.sh"],
+    "resources": ["scripts/aidy-service.sh"],
     "category": "Productivity",
     "shortDescription": "AI Assistant Desktop App",
-    "longDescription": "OpenAidy is a desktop AI assistant that provides agent management, session handling, and extensible addons.",
+    "longDescription": "Aidy is a desktop AI assistant that provides agent management, session handling, and extensible addons.",
     "copyright": "Copyright © 2024",
-    "publisher": "OpenAidy",
+    "publisher": "Aidy",
     "certificateChain": "bundle/certs/cert.pem",
     "signingIdentity": null,
     "windows": {
@@ -97,7 +97,7 @@ Update the `bundle` section in `apps/desktop/src-tauri/tauri.conf.json`:
       "frameworks": [],
       "minimumDeploymentTarget": "10.15",
       "signingIdentity": "-",
-      "providerShortName": "OpenAidy",
+      "providerShortName": "Aidy",
       "entitlements": "bundle/macos/entitlements.plist"
     },
     "linux": {
@@ -129,28 +129,28 @@ Create `apps/desktop/src-tauri/bundle/windows/installer.nsi`:
 ```nsis
 !macro customInstall
   ; Install the service wrapper script
-  File /nonfatal "scripts\openaidy-service.bat"
+  File /nonfatal "scripts\aidy-service.bat"
 
   ; Create config directory
-  CreateDirectory "$APPDATA\openaidy"
+  CreateDirectory "$APPDATA\aidy"
 
   ; Write a default .env file pointing to sqlite
-  FileOpen $0 "$APPDATA\openaidy\.env" w
+  FileOpen $0 "$APPDATA\aidy\.env" w
   FileWrite $0 "DB_KIND=sqlite$\r$\n"
-  FileWrite $0 "OPENAIDY_HOME=$APPDATA\openaidy$\r$\n"
+  FileWrite $0 "AIDY_HOME=$APPDATA\aidy$\r$\n"
   FileClose $0
 
   ; Register scheduled task for auto-start
-  nsExec::ExecToLog 'schtasks /Create /TN OpenAidy /TR "$INSTDIR\openaidy-service.bat" /SC ONLOGON /F'
+  nsExec::ExecToLog 'schtasks /Create /TN Aidy /TR "$INSTDIR\aidy-service.bat" /SC ONLOGON /F'
 !macroend
 
 !macro customUnInstall
   ; Remove scheduled task
-  nsExec::ExecToLog 'schtasks /Delete /TN OpenAidy /F'
+  nsExec::ExecToLog 'schtasks /Delete /TN Aidy /F'
 
   ; Optionally remove user data (ask first)
-  MessageBox MB_YESNO "Remove OpenAidy data and settings?" IDNO +2
-    RMDir /r "$APPDATA\openaidy"
+  MessageBox MB_YESNO "Remove Aidy data and settings?" IDNO +2
+    RMDir /r "$APPDATA\aidy"
 !macroend
 ```
 
@@ -171,7 +171,7 @@ Create `apps/desktop/src-tauri/bundle/macos/entitlements.plist`:
   <true/>
   <key>keychain-access-groups</key>
   <array>
-    <string>$(AppIdentifierPrefix)dev.openaidy</string>
+    <string>$(AppIdentifierPrefix)app.aidyagent</string>
   </array>
 </dict>
 </plist>
@@ -184,15 +184,15 @@ Note: The `keychain-access-groups` is for the app's own keychain entries. The ac
 Create `apps/desktop/src-tauri/bundle/linux/debian/control`:
 
 ```
-Package: openaidy
+Package: aidy
 Version: 0.1.0
 Section: utils
 Priority: optional
-Maintainer: OpenAidy <support@openaidy.dev>
+Maintainer: Aidy <support@aidyagent.app>
 Architecture: amd64
 Depends: libwebkit2gtk-4.1-0 (>= 2.40), libsecret-1-0 (>= 0.18), nodejs (>= 18)
 Description: Desktop AI Assistant
- OpenAidy is a desktop AI assistant providing agent management,
+ Aidy is a desktop AI assistant providing agent management,
  session handling, and an extensible addon system.
 ```
 
@@ -211,19 +211,19 @@ This ensures `apps/web/dist` is populated before Tauri tries to bundle `frontend
 
 After build, copy the service wrapper to a system PATH location:
 
-Create `apps/desktop/scripts/openaidy-service.sh` (Linux/macOS):
+Create `apps/desktop/scripts/aidy-service.sh` (Linux/macOS):
 
 ```bash
 #!/usr/bin/env bash
 set -e
 
-OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.config/openaidy}"
-export OPENAIDY_HOME
+AIDY_HOME="${AIDY_HOME:-$HOME/.config/aidy}"
+export AIDY_HOME
 
 # Load environment
-if [ -f "$OPENAIDY_HOME/.env" ]; then
+if [ -f "$AIDY_HOME/.env" ]; then
   set -a
-  source "$OPENAIDY_HOME/.env"
+  source "$AIDY_HOME/.env"
   set +a
 fi
 
@@ -243,7 +243,7 @@ exec $RUNNER "$SERVER"
 Make it executable:
 
 ```bash
-chmod +x apps/desktop/scripts/openaidy-service.sh
+chmod +x apps/desktop/scripts/aidy-service.sh
 ```
 
 ### Step 9.7: Build Outputs
@@ -253,15 +253,15 @@ After `pnpm tauri build`:
 ```
 apps/desktop/src-tauri/target/release/bundle/
 ├── deb/
-│   └── openaidy_0.1.0_amd64.deb          (~10MB)
+│   └── aidy_0.1.0_amd64.deb          (~10MB)
 ├── msi/
-│   └── openaidy_0.1.0_x64_en-US.msi      (~12MB)
+│   └── aidy_0.1.0_x64_en-US.msi      (~12MB)
 ├── dmg/
-│   └── openaidy_0.1.0.dmg                (~15MB)
+│   └── aidy_0.1.0.dmg                (~15MB)
 ├── appimage/
-│   └── openaidy_0.1.0_amd64.AppImage    (~12MB)
+│   └── aidy_0.1.0_amd64.AppImage    (~12MB)
 └── rpm/
-    └── openaidy-0.1.0-1.x86_64.rpm
+    └── aidy-0.1.0-1.x86_64.rpm
 ```
 
 ### Step 9.8: Code Signing (Placeholder)
@@ -272,14 +272,14 @@ Before shipping, the installers should be signed:
 
 ```bash
 # Developer ID Application certificate required
-codesign --sign "Developer ID Application: Your Name" openaidy.dmg
+codesign --sign "Developer ID Application: Your Name" aidy.dmg
 ```
 
 **Windows:**
 
 ```bash
 # Code signing certificate required
-signtool sign /f certificate.pfx /p password openaidy.msi
+signtool sign /f certificate.pfx /p password aidy.msi
 ```
 
 **Linux:**

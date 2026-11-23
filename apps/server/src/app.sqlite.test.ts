@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 
 const appConfigTemplatePath = fileURLToPath(
-  new URL('../../../config/openaidy.template.json', import.meta.url),
+  new URL('../../../config/aidy.template.json', import.meta.url),
 );
 
 describe('buildApp sqlite bootstrap', { timeout: 15000 }, () => {
@@ -26,8 +26,8 @@ describe('buildApp sqlite bootstrap', { timeout: 15000 }, () => {
   });
 
   it('boots successfully with sqlite configuration', async () => {
-    sqliteDir = mkdtempSync(join(tmpdir(), 'openaidy-sqlite-test-'));
-    const sqlitePath = join(sqliteDir, 'openaidy.db');
+    sqliteDir = mkdtempSync(join(tmpdir(), 'aidy-sqlite-test-'));
+    const sqlitePath = join(sqliteDir, 'aidy.db');
 
     vi.resetModules();
     vi.doMock('./lib/env', () => ({
@@ -38,8 +38,8 @@ describe('buildApp sqlite bootstrap', { timeout: 15000 }, () => {
         DB_KIND: 'sqlite',
         DATABASE_URL: undefined,
         SQLITE_PATH: sqlitePath,
-        OPENAIDY_HOME: sqliteDir!,
-        APP_CONFIG_PATH: join(sqliteDir!, 'openaidy.config.json'),
+        AIDY_HOME: sqliteDir!,
+        APP_CONFIG_PATH: join(sqliteDir!, 'aidy.config.json'),
         APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
         LOG_LEVEL: 'info',
         // Workspace configuration

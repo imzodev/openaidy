@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@solidjs/testing-library';
 import { onMount } from 'solid-js';
-import type { Theme } from '@openaidy/shared-types';
+import type { Theme } from '@aidyagent/shared-types';
 import { AddonViewPage } from './AddonViewPage';
 import { ThemeProvider, useTheme } from '../../lib/theme';
 import type { AddonRecord } from '../../lib/api';
@@ -29,7 +29,7 @@ const ADDON: AddonRecord = {
   permissions: [],
 };
 
-const ADDON_TOKEN_KEY = `openaidy_addon_token:${ADDON.addonId}`;
+const ADDON_TOKEN_KEY = `aidy_addon_token:${ADDON.addonId}`;
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -52,7 +52,7 @@ function postFromIframe(iframe: HTMLIFrameElement, data: unknown) {
  * is required since the component subscribes to it) and return the rendered
  * iframe. The optional `capture` callback receives the live `setTheme` from
  * the theme context so a test can drive a theme change and assert that
- * `OPENAIDY_THEME_CHANGED` fires.
+ * `AIDY_THEME_CHANGED` fires.
  */
 async function renderAndGetIframe(
   capture?: (api: { setTheme: (t: Theme) => void }) => void,
@@ -90,7 +90,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
     vi.clearAllMocks();
   });
 
-  it('never includes the master token in the OPENAIDY_INIT message', async () => {
+  it('never includes the master token in the AIDY_INIT message', async () => {
     const iframe = await renderAndGetIframe();
     const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
 
@@ -98,7 +98,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
 
     expect(postMessage).toHaveBeenCalled();
     const [payload] = postMessage.mock.calls[0]!;
-    expect(payload).toMatchObject({ type: 'OPENAIDY_INIT' });
+    expect(payload).toMatchObject({ type: 'AIDY_INIT' });
     expect(payload).not.toHaveProperty('token');
   });
 
@@ -109,7 +109,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
     const initPayload = postMessage.mock.calls[0]![0] as { nonce: string };
 
     postFromIframe(iframe, {
-      type: 'OPENAIDY_REQUEST',
+      type: 'AIDY_REQUEST',
       requestId: 'req-1',
       method: 'GET',
       path: '/api/addon-proxy/notes',
@@ -136,7 +136,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
     postMessage.mockClear();
 
     postFromIframe(iframe, {
-      type: 'OPENAIDY_REQUEST',
+      type: 'AIDY_REQUEST',
       requestId: 'req-2',
       method: 'GET',
       path: '/api/addon-proxy/notes',
@@ -145,7 +145,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
 
     await waitFor(() =>
       expect(postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'OPENAIDY_RESPONSE', status: 401 }),
+        expect.objectContaining({ type: 'AIDY_RESPONSE', status: 401 }),
         '*',
       ),
     );
@@ -160,7 +160,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
     postMessage.mockClear();
 
     postFromIframe(iframe, {
-      type: 'OPENAIDY_REQUEST',
+      type: 'AIDY_REQUEST',
       requestId: 'req-3',
       method: 'GET',
       path: '/api/agents',
@@ -169,7 +169,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
 
     await waitFor(() =>
       expect(postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'OPENAIDY_RESPONSE', status: 403 }),
+        expect.objectContaining({ type: 'AIDY_RESPONSE', status: 403 }),
         '*',
       ),
     );
@@ -200,7 +200,7 @@ describe('AddonViewPage — token isolation from the sandboxed iframe', () => {
     postFromIframe(iframe, { type: 'ADDON_READY' });
 
     expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'OPENAIDY_INIT' }),
+      expect.objectContaining({ type: 'AIDY_INIT' }),
       '*',
     );
   });
@@ -258,7 +258,7 @@ describe('AddonViewPage — host theme propagation', () => {
     document.documentElement.removeAttribute('style');
   });
 
-  it('includes the current theme (mode + tokens) in the OPENAIDY_INIT message', async () => {
+  it('includes the current theme (mode + tokens) in the AIDY_INIT message', async () => {
     const iframe = await renderAndGetIframe();
     const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
 
@@ -267,10 +267,10 @@ describe('AddonViewPage — host theme propagation', () => {
     expect(postMessage).toHaveBeenCalled();
     const [payload] = postMessage.mock.calls[0]!;
     const init = payload as {
-      type: 'OPENAIDY_INIT';
+      type: 'AIDY_INIT';
       theme: { mode: 'light' | 'dark'; tokens: Record<string, string> };
     };
-    expect(init.type).toBe('OPENAIDY_INIT');
+    expect(init.type).toBe('AIDY_INIT');
     // localStorage 'theme' = 'dark' + dark class on <html> → host is in dark mode.
     expect(init.theme.mode).toBe('dark');
     // The token map is the host's source of truth — at least the canonical
@@ -279,7 +279,7 @@ describe('AddonViewPage — host theme propagation', () => {
     expect(init.theme.tokens['--text-primary']).toBe('#f3f4f6');
   });
 
-  it('posts OPENAIDY_THEME_CHANGED to the iframe when the host theme changes', async () => {
+  it('posts AIDY_THEME_CHANGED to the iframe when the host theme changes', async () => {
     let setTheme: ((t: Theme) => void) | undefined;
     const iframe = await renderAndGetIframe((api) => {
       setTheme = api.setTheme;
@@ -295,7 +295,7 @@ describe('AddonViewPage — host theme propagation', () => {
 
     await waitFor(() =>
       expect(postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'OPENAIDY_THEME_CHANGED' }),
+        expect.objectContaining({ type: 'AIDY_THEME_CHANGED' }),
         '*',
       ),
     );
@@ -347,7 +347,7 @@ describe('AddonViewPage — host theme propagation', () => {
     await waitFor(() =>
       expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'OPENAIDY_THEME_CHANGED',
+          type: 'AIDY_THEME_CHANGED',
           theme: expect.objectContaining({ mode: 'dark' }),
         }),
         '*',

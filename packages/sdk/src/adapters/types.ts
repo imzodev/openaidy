@@ -1,4 +1,4 @@
-import type { ClientType } from '@openaidy/shared-types';
+import type { ClientType } from '@aidyagent/shared-types';
 import type { Logger } from '../websocket-client.types.js';
 import type { WebSocketClient } from '../websocket-client.js';
 

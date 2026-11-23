@@ -9,7 +9,7 @@ import {
   type ProviderError,
   type ProviderErrorCode,
   type ProviderErrorOptions,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { OpenAIErrorResponse } from './types';
 
 // =====================
@@ -48,7 +48,9 @@ const OPENAI_ERROR_CODE_MAP: Record<string, ProviderErrorCode> = {
 /**
  * Checks if a response is an OpenAI error response
  */
-export function isOpenAIError(response: unknown): response is OpenAIErrorResponse {
+export function isOpenAIError(
+  response: unknown,
+): response is OpenAIErrorResponse {
   return (
     typeof response === 'object' &&
     response !== null &&
@@ -140,7 +142,7 @@ function buildErrorOptions(
   providerId: string | undefined,
   modelId: string | undefined,
   cause: unknown,
-  retryAfterMs?: number
+  retryAfterMs?: number,
 ): ProviderErrorOptions {
   const options: ProviderErrorOptions = { cause };
 
@@ -165,7 +167,7 @@ export function normalizeError(
   options?: {
     providerId?: string;
     modelId?: string;
-  }
+  },
 ): ProviderError {
   const providerId = options?.providerId;
   const modelId = options?.modelId;
@@ -178,7 +180,11 @@ export function normalizeError(
     // Try to extract error details from response body
     const message = `HTTP ${error.status}: ${error.statusText}`;
 
-    return createProviderError(code, message, buildErrorOptions(providerId, modelId, error, retryAfterMs));
+    return createProviderError(
+      code,
+      message,
+      buildErrorOptions(providerId, modelId, error, retryAfterMs),
+    );
   }
 
   // Handle OpenAI error response
@@ -190,27 +196,47 @@ export function normalizeError(
       OPENAI_ERROR_CODE_MAP[openAIError.type] ??
       'provider.unknown';
 
-    return createProviderError(code, openAIError.message, buildErrorOptions(providerId, modelId, error));
+    return createProviderError(
+      code,
+      openAIError.message,
+      buildErrorOptions(providerId, modelId, error),
+    );
   }
 
   // Handle network errors
   if (error instanceof TypeError) {
     // fetch throws TypeError for network errors
     if (error.message.includes('fetch') || error.message.includes('network')) {
-      return createProviderError('provider.unavailable', error.message, buildErrorOptions(providerId, modelId, error));
+      return createProviderError(
+        'provider.unavailable',
+        error.message,
+        buildErrorOptions(providerId, modelId, error),
+      );
     }
   }
 
   // Handle AbortError (timeout)
   if (error instanceof Error && error.name === 'AbortError') {
-    return createProviderError('provider.timeout', 'Request timed out', buildErrorOptions(providerId, modelId, error));
+    return createProviderError(
+      'provider.timeout',
+      'Request timed out',
+      buildErrorOptions(providerId, modelId, error),
+    );
   }
 
   // Handle generic errors
   if (error instanceof Error) {
-    return createProviderError('provider.unknown', error.message, buildErrorOptions(providerId, modelId, error));
+    return createProviderError(
+      'provider.unknown',
+      error.message,
+      buildErrorOptions(providerId, modelId, error),
+    );
   }
 
   // Fallback for unknown error types
-  return createProviderError('provider.unknown', extractErrorMessage(error), buildErrorOptions(providerId, modelId, error));
+  return createProviderError(
+    'provider.unknown',
+    extractErrorMessage(error),
+    buildErrorOptions(providerId, modelId, error),
+  );
 }

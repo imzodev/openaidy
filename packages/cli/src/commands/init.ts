@@ -1,5 +1,5 @@
 /**
- * openaidy init - Generate or refresh the bootstrap-admin token.
+ * aidy init - Generate or refresh the bootstrap-admin token.
  *
  * PR1 (installation-onboarding). This handler replaces the legacy
  * `initAddon` / `updateConfig` exports that were never wired into the
@@ -13,8 +13,8 @@
  *  - Expired / corrupt / missing-field record: regenerates.
  *  - JWT secret is the unsafe default: exits 1 with remediation message
  *    (R-2 / CC-3). The unsafe default is `UNSAFE_DEFAULT_JWT_SECRET`
- *    exported from `@openaidy/config`; resolveCLIConfig returns it when
- *    neither `WS_TOKEN_SECRET` nor `$OPENAIDY_HOME/state/install.json`
+ *    exported from `@aidyagent/config`; resolveCLIConfig returns it when
+ *    neither `WS_TOKEN_SECRET` nor `$AIDY_HOME/state/install.json`
  *    provides a real secret.
  *  - `BOOTSTRAP_ADMIN_ENABLED=false`: exits 1.
  *  - Prints exactly one parseable line `Bootstrap admin token: <jwt>`
@@ -24,8 +24,8 @@
 import {
   createBootstrapAdminWorkflow,
   type BootstrapAdminContext,
-} from '@openaidy/control-plane';
-import { UNSAFE_DEFAULT_JWT_SECRET } from '@openaidy/config';
+} from '@aidyagent/control-plane';
+import { UNSAFE_DEFAULT_JWT_SECRET } from '@aidyagent/config';
 import type { CommandResult } from '../types.js';
 import { createCLIError, formatCLIError } from '../errors.js';
 import { resolveCLIConfig } from '../lib/config.js';
@@ -42,10 +42,10 @@ const DEFAULT_BOOTSTRAP_CLIENT_ID = 'bootstrap-admin';
 const DEFAULT_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Help text for `openaidy init --help`.
+ * Help text for `aidy init --help`.
  */
 const HELP_TEXT = `
-Usage: openaidy init [options]
+Usage: aidy init [options]
 
 Generate or refresh the bootstrap-admin token.
 
@@ -53,7 +53,7 @@ This command:
   - Mints a fresh admin JWT if no token file exists (or the existing
     one is expired, corrupt, or missing required fields).
   - Reuses an existing valid token without rewriting the file.
-  - Persists the token to $OPENAIDY_HOME/credentials/bootstrap-admin.json
+  - Persists the token to $AIDY_HOME/credentials/bootstrap-admin.json
     (POSIX mode 0o600).
   - Prints the token value to stdout on success.
 
@@ -61,7 +61,7 @@ The token is required on first browser login. Open the URL printed by
 the installer and paste the token into the login screen.
 
 The JWT signing secret is resolved with the same precedence as the
-server: explicit WS_TOKEN_SECRET env var > $OPENAIDY_HOME/state/install.json
+server: explicit WS_TOKEN_SECRET env var > $AIDY_HOME/state/install.json
 (persisted by the install script) > refusal. Running on a fresh
 install without the manifest will exit 1.
 
@@ -70,7 +70,7 @@ Options:
 
 Environment:
   WS_TOKEN_SECRET       JWT signing secret (overrides the manifest)
-  OPENAIDY_HOME         Install root (default: ~/.openaidy)
+  AIDY_HOME         Install root (default: ~/.aidy)
   BOOTSTRAP_ADMIN_ENABLED   Set to 'false' to disable (default: true)
 
 Exit Codes:
@@ -79,8 +79,8 @@ Exit Codes:
      persistence failure
 
 Examples:
-  openaidy init
-  WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init
+  aidy init
+  WS_TOKEN_SECRET=$(openssl rand -hex 32) aidy init
 `;
 
 /**
@@ -103,7 +103,7 @@ function buildContext(env: NodeJS.ProcessEnv): BootstrapAdminContext {
 }
 
 /**
- * The `openaidy init` command handler.
+ * The `aidy init` command handler.
  *
  * Accepts the test-only `envOverride` parameter so unit tests can
  * drive env resolution without mutating real `process.env`. The runtime
@@ -133,7 +133,7 @@ export async function initHandler(
   if (ctx.jwtSecret === UNSAFE_DEFAULT_JWT_SECRET) {
     const err = createCLIError(
       'INTERNAL_ERROR',
-      'Refusing to generate token with default JWT secret. Set WS_TOKEN_SECRET in your environment, or run via the install script which persists the secret to $OPENAIDY_HOME/state/install.json.',
+      'Refusing to generate token with default JWT secret. Set WS_TOKEN_SECRET in your environment, or run via the install script which persists the secret to $AIDY_HOME/state/install.json.',
     );
     return { exitCode: err.exitCode, error: formatCLIError(err) };
   }

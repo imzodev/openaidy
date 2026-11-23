@@ -1,4 +1,4 @@
-import { WS_CAPABILITIES, type ClientType } from '@openaidy/shared-types';
+import { WS_CAPABILITIES, type ClientType } from '@aidyagent/shared-types';
 
 const DEFAULT_CAPABILITIES: Record<ClientType, string[]> = {
   web: [

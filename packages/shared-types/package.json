@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/shared-types",
+  "name": "@aidyagent/shared-types",
   "private": true,
   "type": "module",
   "exports": {

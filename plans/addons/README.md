@@ -1,10 +1,10 @@
-# OpenAidy Addons System Documentation
+# Aidy Addons System Documentation
 
-This directory contains comprehensive documentation for implementing the OpenAidy addons feature - a plugin system that allows third-party developers to create UI extensions that integrate with OpenAidy's agents.
+This directory contains comprehensive documentation for implementing the Aidy addons feature - a plugin system that allows third-party developers to create UI extensions that integrate with Aidy's agents.
 
 ## Overview
 
-The addons system transforms OpenAidy into an extensible platform similar to WordPress plugins or VS Code extensions. It provides a secure, scalable foundation for third-party developers to create valuable extensions while maintaining strict security boundaries and excellent user experience.
+The addons system transforms Aidy into an extensible platform similar to WordPress plugins or VS Code extensions. It provides a secure, scalable foundation for third-party developers to create valuable extensions while maintaining strict security boundaries and excellent user experience.
 
 ## Implementation Phases
 
@@ -93,7 +93,7 @@ Secure intermediary that enforces permissions and provides audit logging.
 
 ### Runtime API
 
-Client-side API that addons use to communicate with OpenAidy services.
+Client-side API that addons use to communicate with Aidy services.
 
 ### Marketplace
 

@@ -20,7 +20,7 @@ This is the foundation for everything that follows. Doing it first means Phases 
 
 - All existing Pulse tests pass
 - `SchedulerService.tick()` dispatches through the registry when runnables are registered, falls back to the old path otherwise
-- `ScheduleInput` type is importable from `@openaidy/shared-types`
+- `ScheduleInput` type is importable from `@aidyagent/shared-types`
 - No new dependencies introduced
 
 ---
@@ -67,10 +67,10 @@ export * from './scheduling.js';
 
 **Update: `apps/server/src/pulses/utils.ts`**
 
-Replace the local `ScheduleInput` type with a re-export from `@openaidy/shared-types`:
+Replace the local `ScheduleInput` type with a re-export from `@aidyagent/shared-types`:
 
 ```ts
-export type { ScheduleInput } from '@openaidy/shared-types';
+export type { ScheduleInput } from '@aidyagent/shared-types';
 ```
 
 This keeps the import surface stable for callers of `pulses/utils.ts` while the canonical definition moves to `shared-types`.
@@ -87,7 +87,7 @@ import {
   calculateNextRun,
   describeCronExpression,
 } from './cron-utils.js';
-import type { ScheduleInput } from '@openaidy/shared-types';
+import type { ScheduleInput } from '@aidyagent/shared-types';
 
 export type ParsedSchedule = {
   type: 'cron' | 'one-shot';
@@ -226,7 +226,7 @@ export * from './scheduling/runnable.js';
 Add the registry and a registration method. The `tick()` method gets a new code path that uses the registry when runnables are registered, and falls back to the old `claimNextDueJob + executeJob` flow otherwise.
 
 ```ts
-import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+import type { ScheduledRunnable, ExecutionResult } from '@aidyagent/runtime';
 
 export class SchedulerService {
   // ... existing fields ...
@@ -305,13 +305,13 @@ Keep the original `tick()` body intact as `tickLegacy()`. The public `tick()` ke
 This adapter wraps the existing Pulse execution path so it can be invoked through the runnable interface without rewriting `SchedulerService.executeJob`.
 
 ```ts
-import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+import type { ScheduledRunnable, ExecutionResult } from '@aidyagent/runtime';
 import type {
   JobsStore,
   JobRunsStore,
   SessionsStore,
   ScheduledJob,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { SessionMessageService } from '../sessions/service';
 import { calculateNextRun } from './cron-utils';
 import type { GenericLogger } from './service';

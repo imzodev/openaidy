@@ -1,5 +1,5 @@
 /**
- * @openaidy/control-plane
+ * @aidyagent/control-plane
  *
  * Shared control-plane application layer for admin workflows.
  * This package provides workflow-oriented interfaces that sit between

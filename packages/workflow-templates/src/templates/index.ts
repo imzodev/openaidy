@@ -1,4 +1,4 @@
-import type { WorkflowTemplate } from '@openaidy/shared-types';
+import type { WorkflowTemplate } from '@aidyagent/shared-types';
 import { appointmentRemindersTemplate } from './appointment-reminders.js';
 import { dailySalesSummaryTemplate } from './daily-sales-summary.js';
 import { inboxTriageTemplate } from './inbox-triage.js';

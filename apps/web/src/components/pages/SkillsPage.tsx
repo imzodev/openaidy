@@ -97,7 +97,7 @@ export function SkillsPage() {
     if (preinstalled.length > 0) {
       result.push({
         title: 'Pre-installed',
-        description: 'Bundled skills shipped with OpenAidy',
+        description: 'Bundled skills shipped with Aidy',
         skills: preinstalled,
       });
     }

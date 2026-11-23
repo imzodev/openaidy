@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { Writable } from 'node:stream';
-import type { LogLevel, LogEntry } from '@openaidy/shared-types';
+import type { LogLevel, LogEntry } from '@aidyagent/shared-types';
 import { getLogBuffer } from './log-buffer';
 import { getCorrelationContext } from './correlation';
 

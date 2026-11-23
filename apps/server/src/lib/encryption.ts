@@ -93,7 +93,7 @@ export class EncryptionService {
  * Resolution order (zero-config but never a shared hardcoded secret):
  *   1. CREDENTIALS_MASTER_KEY env var — explicit operator override for
  *      containerized/rotated/shared-key deployments.
- *   2. A unique random key persisted per install under OPENAIDY_HOME. On
+ *   2. A unique random key persisted per install under AIDY_HOME. On
  *      first run it is generated and written (0600) next to the data it
  *      protects, so the app works out of the box with no configuration.
  *   3. Tests use an ephemeral in-memory key and never touch disk.
@@ -108,7 +108,7 @@ function resolveMasterKey(): string {
     return randomBytes(KEY_LENGTH).toString('hex');
   }
 
-  const keyPath = resolve(env.OPENAIDY_HOME, 'credentials/master.key');
+  const keyPath = resolve(env.AIDY_HOME, 'credentials/master.key');
 
   if (existsSync(keyPath)) {
     const existing = readFileSync(keyPath, 'utf8').trim();

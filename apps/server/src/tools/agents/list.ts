@@ -1,6 +1,6 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { AgentRegistry } from '../../agents/registry.js';
-import type { McpServerRef } from '@openaidy/shared-types';
+import type { McpServerRef } from '@aidyagent/shared-types';
 import { agentsListMeta } from '../catalog.js';
 
 function formatList(value: string[] | undefined): string {

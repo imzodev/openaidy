@@ -7,7 +7,7 @@ import {
   type ProviderDescriptor,
   type ModelRequest,
   type ModelStreamEvent,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import { ProviderRegistryService, createProviderRegistry } from './registry';
 import { ProviderSelectionService, createProviderSelection } from './selection';
 import { ModelInvocationService, createModelInvocation } from './invocation';
@@ -23,8 +23,11 @@ function createMockProvider(options?: {
   streamError?: boolean;
 }): ModelProvider {
   const id = options?.id ?? 'test-provider';
-  const capabilities = options?.capabilities ?? ['text_generation', 'streaming'];
-  
+  const capabilities = options?.capabilities ?? [
+    'text_generation',
+    'streaming',
+  ];
+
   const descriptor: ProviderDescriptor = {
     id,
     name: `Provider ${id}`,
@@ -40,7 +43,10 @@ function createMockProvider(options?: {
           id: 'test-model',
           providerId: id,
           name: 'Test Model',
-          capabilities: capabilities.slice(0, 1) as ProviderDescriptor['capabilities'],
+          capabilities: capabilities.slice(
+            0,
+            1,
+          ) as ProviderDescriptor['capabilities'],
         },
       ]),
     getModel: async (modelId: string) => {
@@ -49,10 +55,15 @@ function createMockProvider(options?: {
           id: 'test-model',
           providerId: id,
           name: 'Test Model',
-          capabilities: capabilities.slice(0, 1) as ProviderDescriptor['capabilities'],
+          capabilities: capabilities.slice(
+            0,
+            1,
+          ) as ProviderDescriptor['capabilities'],
         });
       }
-      return err(createProviderError('provider.model_not_found', 'Model not found'));
+      return err(
+        createProviderError('provider.model_not_found', 'Model not found'),
+      );
     },
     hasCapability: (cap) => descriptor.capabilities.includes(cap),
     invoke: async (req: ModelRequest) => {
@@ -61,7 +72,7 @@ function createMockProvider(options?: {
           createProviderError('provider.unavailable', 'Provider failed', {
             providerId: id,
             modelId: req.model,
-          })
+          }),
         );
       }
       return ok({
@@ -74,15 +85,18 @@ function createMockProvider(options?: {
         created: new Date().toISOString(),
       });
     },
-    invokeStream: async function* (req: ModelRequest): AsyncIterable<
-      { ok: true; value: ModelStreamEvent } | { ok: false; error: ReturnType<typeof createProviderError> }
+    invokeStream: async function* (
+      req: ModelRequest,
+    ): AsyncIterable<
+      | { ok: true; value: ModelStreamEvent }
+      | { ok: false; error: ReturnType<typeof createProviderError> }
     > {
       if (options?.streamError) {
         yield err(
           createProviderError('provider.stream_error', 'Stream failed', {
             providerId: id,
             modelId: req.model,
-          })
+          }),
         );
         return;
       }
@@ -124,7 +138,10 @@ describe('ModelInvocationService', () => {
     it('should invoke a model successfully', async () => {
       const provider = createMockProvider();
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       const result = await invocation.invoke({
         model: 'test-model',
@@ -139,16 +156,22 @@ describe('ModelInvocationService', () => {
     });
 
     it('should use explicit provider override', async () => {
-      const provider1 = createMockProvider({ id: 'provider-1', invokeResponse: 'Response 1' });
-      const provider2 = createMockProvider({ id: 'provider-2', invokeResponse: 'Response 2' });
-      
+      const provider1 = createMockProvider({
+        id: 'provider-1',
+        invokeResponse: 'Response 1',
+      });
+      const provider2 = createMockProvider({
+        id: 'provider-2',
+        invokeResponse: 'Response 2',
+      });
+
       registry.register(provider1);
       registry.register(provider2);
       registry.setDefault({ providerId: 'provider-1', modelId: 'test-model' });
 
       const result = await invocation.invoke(
         { model: 'test-model', messages: [{ role: 'user', content: 'Hello' }] },
-        { providerId: 'provider-2' }
+        { providerId: 'provider-2' },
       );
 
       expect(result.ok).toBe(true);
@@ -160,11 +183,17 @@ describe('ModelInvocationService', () => {
     it('should use explicit model override', async () => {
       const provider = createMockProvider();
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'default-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'default-model',
+      });
 
       const result = await invocation.invoke(
-        { model: 'default-model', messages: [{ role: 'user', content: 'Hello' }] },
-        { modelId: 'custom-model' }
+        {
+          model: 'default-model',
+          messages: [{ role: 'user', content: 'Hello' }],
+        },
+        { modelId: 'custom-model' },
       );
 
       expect(result.ok).toBe(true);
@@ -190,7 +219,10 @@ describe('ModelInvocationService', () => {
     it('should return error for disabled provider', async () => {
       const provider = createMockProvider();
       registry.register(provider, { enabled: false });
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       const result = await invocation.invoke({
         model: 'test-model',
@@ -226,7 +258,10 @@ describe('ModelInvocationService', () => {
     it('should normalize provider errors', async () => {
       const provider = createMockProvider({ shouldFail: true });
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       const result = await invocation.invoke({
         model: 'test-model',
@@ -243,7 +278,10 @@ describe('ModelInvocationService', () => {
     it('should include metadata in request', async () => {
       const provider = createMockProvider();
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       const result = await invocation.invoke(
         {
@@ -251,7 +289,7 @@ describe('ModelInvocationService', () => {
           messages: [{ role: 'user', content: 'Hello' }],
           metadata: { userId: 'user-123' },
         },
-        { metadata: { requestId: 'req-456' } }
+        { metadata: { requestId: 'req-456' } },
       );
 
       expect(result.ok).toBe(true);
@@ -262,7 +300,10 @@ describe('ModelInvocationService', () => {
     it('should stream events successfully', async () => {
       const provider = createMockProvider();
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       const events: ModelStreamEvent[] = [];
       for await (const result of invocation.invokeStream({
@@ -325,7 +366,10 @@ describe('ModelInvocationService', () => {
     it('should yield stream error from provider', async () => {
       const provider = createMockProvider({ streamError: true });
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       const events = [];
       for await (const result of invocation.invokeStream({
@@ -344,8 +388,11 @@ describe('ModelInvocationService', () => {
 
     it('should use explicit provider override', async () => {
       const provider1 = createMockProvider({ id: 'provider-1' });
-      const provider2 = createMockProvider({ id: 'provider-2', invokeResponse: 'Stream from 2' });
-      
+      const provider2 = createMockProvider({
+        id: 'provider-2',
+        invokeResponse: 'Stream from 2',
+      });
+
       registry.register(provider1);
       registry.register(provider2);
       registry.setDefault({ providerId: 'provider-1', modelId: 'test-model' });
@@ -353,7 +400,7 @@ describe('ModelInvocationService', () => {
       const events: ModelStreamEvent[] = [];
       for await (const result of invocation.invokeStream(
         { model: 'test-model', messages: [{ role: 'user', content: 'Hello' }] },
-        { providerId: 'provider-2' }
+        { providerId: 'provider-2' },
       )) {
         if (result.ok) {
           events.push(result.value);
@@ -361,7 +408,7 @@ describe('ModelInvocationService', () => {
       }
 
       // Check that the stream.started event has the correct providerId
-      const startedEvent = events.find(e => e.type === 'stream.started');
+      const startedEvent = events.find((e) => e.type === 'stream.started');
       expect(startedEvent?.type).toBe('stream.started');
       if (startedEvent?.type === 'stream.started') {
         expect(startedEvent.providerId).toBe('provider-2');

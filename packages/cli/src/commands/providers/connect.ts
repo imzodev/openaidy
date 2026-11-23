@@ -1,7 +1,7 @@
 /**
  * Providers Connect Command Handler
  *
- * Implements `openaidy providers connect` command.
+ * Implements `aidy providers connect` command.
  * Uses GET/PUT /config API to store provider API keys in app config.
  */
 
@@ -9,7 +9,7 @@ import * as p from '@clack/prompts';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 
 interface AppConfig {
   version: number;
@@ -80,7 +80,7 @@ export async function providersConnectHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy providers connect <provider-id> [options]
+      `Usage: aidy providers connect <provider-id> [options]
 
 Connect to a provider using an API key.
 
@@ -92,8 +92,8 @@ Options:
   --help           Show this help message
 
 Examples:
-  pnpm openaidy providers connect openai --api-key sk-...
-  PROVIDER_API_KEY=sk-... pnpm openaidy providers connect anthropic
+  pnpm aidy providers connect openai --api-key sk-...
+  PROVIDER_API_KEY=sk-... pnpm aidy providers connect anthropic
 
 Exit Codes:
   0  Success
@@ -106,9 +106,7 @@ Exit Codes:
   const providerId = args[0];
   if (!providerId) {
     p.log.error('Provider ID is required.');
-    p.log.info(
-      'Usage: openaidy providers connect <provider-id> [--api-key <key>]',
-    );
+    p.log.info('Usage: aidy providers connect <provider-id> [--api-key <key>]');
     return { exitCode: 1, error: 'Provider ID is required' };
   }
   // Validate provider ID against presets
@@ -128,7 +126,7 @@ Exit Codes:
   // step.
   if (preset.local) {
     p.log.error(
-      `${preset.name} is a local provider — configure it in the OpenAidy UI.`,
+      `${preset.name} is a local provider — configure it in the Aidy UI.`,
     );
     p.log.info(
       `Open Settings → Providers → ${preset.name} → "Discover models", then Save. ` +
@@ -150,13 +148,13 @@ Exit Codes:
 
   // Try to get from environment variable
   if (!apiKey) {
-    apiKey = process.env.OPENAIDY_PROVIDER_API_KEY;
+    apiKey = process.env.AIDY_PROVIDER_API_KEY;
   }
 
   if (!apiKey) {
     p.log.error('API key is required.');
     p.log.info(
-      'Provide it via --api-key argument or OPENAIDY_PROVIDER_API_KEY env var',
+      'Provide it via --api-key argument or AIDY_PROVIDER_API_KEY env var',
     );
     return { exitCode: 1, error: 'API key is required' };
   }

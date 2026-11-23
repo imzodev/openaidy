@@ -19,7 +19,7 @@ import { createDevicesApproveHandler } from './approve.js';
 import type {
   PairingContext,
   PairingRequestData,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 
 describe('Devices Approve Command', () => {
   const createRequest = (

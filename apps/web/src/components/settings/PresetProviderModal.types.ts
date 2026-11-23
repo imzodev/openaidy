@@ -7,7 +7,7 @@
  */
 
 import type { ProviderConfig } from '../../lib/api';
-import type { ProviderPreset } from '@openaidy/shared-types';
+import type { ProviderPreset } from '@aidyagent/shared-types';
 
 export type PresetProviderModalProps = {
   preset: ProviderPreset;

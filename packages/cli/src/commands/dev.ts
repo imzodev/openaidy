@@ -30,7 +30,7 @@ export async function startDevServer(
     return {
       success: false,
       message:
-        'addon.json not found. Run "openaidy init" to initialize the project.',
+        'addon.json not found. Run "aidy init" to initialize the project.',
     };
   }
 
@@ -47,7 +47,7 @@ export async function startDevServer(
   // 1. Start a Vite dev server
   // 2. Set up file watching
   // 3. Configure HMR
-  // 4. Set up proxy to OpenAidy backend
+  // 4. Set up proxy to Aidy backend
 
   return {
     success: true,
@@ -60,18 +60,18 @@ export async function startDevServer(
 /**
  * Get Vite configuration for development
  */
-export function getViteConfig(addonId: string, openaidyUrl: string) {
+export function getViteConfig(addonId: string, aidyUrl: string) {
   return {
     server: {
       port: 3000,
       host: 'localhost',
       proxy: {
         '/api': {
-          target: openaidyUrl,
+          target: aidyUrl,
           changeOrigin: true,
         },
         '/ws': {
-          target: openaidyUrl,
+          target: aidyUrl,
           ws: true,
         },
       },

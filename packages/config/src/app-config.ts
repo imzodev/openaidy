@@ -429,7 +429,7 @@ const timeOfDaySchema = z
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour HH:MM, e.g. 08:30');
 
 /**
- * Who OpenAidy works for and how to reach them: proactive messages
+ * Who Aidy works for and how to reach them: proactive messages
  * (briefings, alerts, reminders, workflow approvals) go to this chat.
  */
 export const ownerConfigSchema = z.object({
@@ -479,7 +479,7 @@ export const appConfigSchema = z
     modelPricing: z.record(z.string(), modelPricingSchema).optional(),
     /** Task/subtask execution tuning (retries, dependency-context limits) */
     execution: executionConfigSchema.optional().default({}),
-    /** Who OpenAidy works for and where to reach them. */
+    /** Who Aidy works for and where to reach them. */
     owner: ownerConfigSchema.optional(),
   })
   .superRefine((config, ctx) => {
@@ -687,7 +687,7 @@ export const appConfigSchema = z
     }
   });
 
-export type OpenAidyAppConfig = z.infer<typeof appConfigSchema>;
+export type AidyAppConfig = z.infer<typeof appConfigSchema>;
 export type AppDefaults = z.infer<typeof appDefaultsSchema>;
 export type AppProviderConfig = z.infer<typeof appProviderConfigSchema>;
 export type AppModelConfig = z.infer<typeof appModelConfigSchema>;
@@ -696,7 +696,7 @@ export type AppVendorFamily = z.infer<typeof vendorFamilySchema>;
 
 export function validateAppConfig(
   config: unknown,
-): { ok: true; value: OpenAidyAppConfig } | { ok: false; error: string } {
+): { ok: true; value: AidyAppConfig } | { ok: false; error: string } {
   const result = appConfigSchema.safeParse(config);
   if (result.success) {
     return { ok: true, value: result.data };

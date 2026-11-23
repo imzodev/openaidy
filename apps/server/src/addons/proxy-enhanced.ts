@@ -7,7 +7,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { AddonService } from './service';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 import { AddonProxyService, createAddonProxyService } from './proxy';
 import {
   ProxySecurity,

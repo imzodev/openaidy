@@ -1,14 +1,14 @@
 ---
-summary: 'Suggested plugin SDK contracts for OpenAidy'
+summary: 'Suggested plugin SDK contracts for Aidy'
 read_when:
-  - You are designing the public extension APIs for OpenAidy
+  - You are designing the public extension APIs for Aidy
   - You want stable plugin contracts for channels, tools, UI, and automations
-title: 'OpenAidy Plugin SDK'
+title: 'Aidy Plugin SDK'
 ---
 
-# OpenAidy Plugin SDK
+# Aidy Plugin SDK
 
-OpenAidy should expose a public SDK that allows third parties to build plugins without depending on private implementation details.
+Aidy should expose a public SDK that allows third parties to build plugins without depending on private implementation details.
 
 ## Design rules
 
@@ -20,7 +20,7 @@ OpenAidy should expose a public SDK that allows third parties to build plugins w
 
 ## Plugin categories
 
-OpenAidy should support at least these plugin categories:
+Aidy should support at least these plugin categories:
 
 - channel plugins
 - tool plugins
@@ -211,7 +211,7 @@ Recommended test helpers:
 3. Register tools, channels, or panels with public APIs.
 4. Validate config schema.
 5. Run contract tests.
-6. Install and enable in a local OpenAidy development environment.
+6. Install and enable in a local Aidy development environment.
 
 ## Anti-patterns
 

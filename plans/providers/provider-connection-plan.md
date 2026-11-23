@@ -40,7 +40,7 @@
 │                         │                                       │
 │   ┌─────────────────────▼─────────────────────┐                │
 │   │         Provider Registry                 │                │
-│   │  • Uses @openaidy/providers package       │                │
+│   │  • Uses @aidyagent/providers package       │                │
 │   │  • ProviderProfile instances               │                │
 │   │  • Hook system for provider-specific logic │                │
 │   └────────────────────────────────────────────┘                │
@@ -1041,7 +1041,7 @@ export class ProviderService {
     // For OAuth/device_code, return error indicating user needs to re-authenticate via UI
     return {
       success: false,
-      error: `Please reconnect via UI: openaidy providers connect ${providerId}`,
+      error: `Please reconnect via UI: aidy providers connect ${providerId}`,
     };
   }
 
@@ -1081,7 +1081,7 @@ import {
   ProviderNotFoundError,
   ProviderConnectionError,
   OAuthError,
-} from '@openaidy/shared-types/providers.js';
+} from '@aidyagent/shared-types/providers.js';
 
 export const providerRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (
   app,
@@ -1401,11 +1401,11 @@ export const providerCommands = [
     // List all provider commands
     console.log(`
 Provider Commands:
-  openaidy providers list              List all available providers
-  openaidy providers connect <id>      Connect to a provider
-  openaidy providers disconnect <id>   Disconnect a provider
-  openaidy providers status            Show connection status
-  openaidy providers auth <id>         Check auth methods for provider
+  aidy providers list              List all available providers
+  aidy providers connect <id>      Connect to a provider
+  aidy providers disconnect <id>   Disconnect a provider
+  aidy providers status            Show connection status
+  aidy providers auth <id>         Check auth methods for provider
 `);
     return { exitCode: 0 };
   }),
@@ -1704,7 +1704,7 @@ async function connectWithOAuth(
 ### Interface Segregation Principle (ISP)
 
 - `ProviderProfile` has focused methods: `getAvailableAuthMethods()`, `validateApiKey()`, `getOAuthAuthorizationUrl()`
-- Large provider interface is split into focused hooks in `@openaidy/providers`
+- Large provider interface is split into focused hooks in `@aidyagent/providers`
 
 ### Dependency Inversion Principle (DIP)
 

@@ -4,7 +4,7 @@
  *
  * Why: `better-sqlite3` is a native addon whose prebuilt binary is fetched by a
  * postinstall script. npm v12 disables dependency lifecycle scripts by default,
- * so `npm install -g @openaidy/app` would skip that script and leave the server
+ * so `npm install -g @aidyagent/app` would skip that script and leave the server
  * with no SQLite binary. Node's built-in `node:sqlite` needs no native install
  * step, so shipping this shim removes the failure class entirely.
  *

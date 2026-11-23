@@ -2,7 +2,7 @@
  * Provider Configuration Module
  *
  * This module exports all provider configuration schemas and utilities
- * for managing provider settings in OpenAidy.
+ * for managing provider settings in Aidy.
  *
  * @example
  * ```typescript
@@ -12,7 +12,7 @@
  *   createGeminiConfig,
  *   createDefaultSecretProvider,
  *   envSecret,
- * } from '@openaidy/config';
+ * } from '@aidyagent/config';
  *
  * // Create a secret provider
  * const secretProvider = createDefaultSecretProvider();

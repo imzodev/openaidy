@@ -2,7 +2,7 @@
  * Bootstrap Admin Record - Shared Types Tests
  *
  * Verifies the BootstrapAdminRecord type is exported from
- * @openaidy/shared-types and structurally matches the historical shape
+ * @aidyagent/shared-types and structurally matches the historical shape
  * that apps/server and packages/cli have always relied on:
  * { clientId, token, scopes, createdAt, expiresAt }.
  *
@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import type { BootstrapAdminRecord } from './bootstrap-admin.js';
 
 describe('BootstrapAdminRecord (shared-types)', () => {
-  it('is exported from @openaidy/shared-types', () => {
+  it('is exported from @aidyagent/shared-types', () => {
     // Type-only assertion at compile time + a structural runtime check
     // so the test fails loudly if anyone removes the export.
     const sample: BootstrapAdminRecord = {

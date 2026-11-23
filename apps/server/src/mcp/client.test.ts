@@ -4,7 +4,7 @@ import {
   EnvPlaceholderResolver,
   MissingEnvVarsError,
 } from './placeholder-resolver';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import type { UvxEnvironmentRepairer } from './uvx-repair';
 
 describe('McpClientService', () => {

@@ -1,7 +1,7 @@
 /**
  * SDK Package
  *
- * Exports for the OpenAidy SDK.
+ * Exports for the Aidy SDK.
  */
 
 // WebSocket Client SDK

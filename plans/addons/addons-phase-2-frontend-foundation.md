@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 2 builds the frontend infrastructure that enables addons to be dynamically loaded, displayed in the UI, and interact with OpenAidy's backend systems. This phase focuses on creating the client-side addon loader, runtime API, and management interface.
+Phase 2 builds the frontend infrastructure that enables addons to be dynamically loaded, displayed in the UI, and interact with Aidy's backend systems. This phase focuses on creating the client-side addon loader, runtime API, and management interface.
 
 ## Objectives
 
@@ -21,7 +21,7 @@ Phase 2 builds the frontend infrastructure that enables addons to be dynamically
 **File: `apps/web/src/lib/addon-types.ts`**
 
 ```typescript
-import type { AddonManifest, AddonRecord } from '@openaidy/shared-types';
+import type { AddonManifest, AddonRecord } from '@aidyagent/shared-types';
 
 /**
  * Loaded addon instance
@@ -126,7 +126,7 @@ import type {
   AddonManifest,
   AddonRecord,
   CreateAddonResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type {
   LoadedAddon,
   AddonRoute,
@@ -399,7 +399,7 @@ export const addonLoader = new AddonLoader();
 **File: `apps/web/src/lib/addon-runtime.ts`**
 
 ```typescript
-import type { AddonRecord } from '@openaidy/shared-types';
+import type { AddonRecord } from '@aidyagent/shared-types';
 import type {
   AddonRuntime,
   AddonInfo,
@@ -506,8 +506,8 @@ export function createAddonRuntime(addonRecord: AddonRecord): AddonRuntime {
      */
     navigate(path: string): void {
       // Use router navigation - this will be injected
-      if (window.__OPENAIDY_ROUTER__) {
-        window.__OPENAIDY_ROUTER__.navigate(path);
+      if (window.__AIDY_ROUTER__) {
+        window.__AIDY_ROUTER__.navigate(path);
       } else {
         // Fallback
         window.location.hash = path;
@@ -522,8 +522,8 @@ export function createAddonRuntime(addonRecord: AddonRecord): AddonRuntime {
       type: 'info' | 'success' | 'error',
     ): void {
       // Use notification system - this will be injected
-      if (window.__OPENAIDY_NOTIFICATIONS__) {
-        window.__OPENAIDY_NOTIFICATIONS__.show(message, type);
+      if (window.__AIDY_NOTIFICATIONS__) {
+        window.__AIDY_NOTIFICATIONS__.show(message, type);
       } else {
         // Fallback
         console.log(`[${type.toUpperCase()}] ${message}`);
@@ -573,10 +573,10 @@ export function createAddonRuntime(addonRecord: AddonRecord): AddonRuntime {
 // Extend window interface for global services
 declare global {
   interface Window {
-    __OPENAIDY_ROUTER__?: {
+    __AIDY_ROUTER__?: {
       navigate(path: string): void;
     };
-    __OPENAIDY_NOTIFICATIONS__?: {
+    __AIDY_NOTIFICATIONS__?: {
       show(message: string, type: 'info' | 'success' | 'error'): void;
     };
   }
@@ -649,7 +649,7 @@ export async function loadAddonRoutes(): Promise<void> {
     }
 
     // Provide router to addon runtime
-    window.__OPENAIDY_ROUTER__ = {
+    window.__AIDY_ROUTER__ = {
       navigate: (path: string) => router.navigate(path),
     };
   } catch (error) {
@@ -769,7 +769,7 @@ export function Sidebar() {
     <div class="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 h-full flex flex-col">
       {/* Logo */}
       <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h1 class="text-xl font-bold text-text-primary">OpenAidy</h1>
+        <h1 class="text-xl font-bold text-text-primary">Aidy</h1>
       </div>
 
       {/* Navigation */}
@@ -864,7 +864,7 @@ import {
   Settings,
 } from 'lucide-solid';
 import { Layout } from './Layout';
-import type { AddonRecord } from '@openaidy/shared-types';
+import type { AddonRecord } from '@aidyagent/shared-types';
 
 interface AddonFormData {
   name: string;
@@ -875,7 +875,7 @@ export function AddonsPage() {
   const [addons, { refetch }] = createResource(async () => {
     const response = await fetch('/api/addons', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('openaidy_auth_token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('aidy_auth_token')}`,
       },
     });
 
@@ -918,7 +918,7 @@ export function AddonsPage() {
       const response = await fetch('/api/addons', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('openaidy_auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('aidy_auth_token')}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -930,7 +930,7 @@ export function AddonsPage() {
             version: '1.0.0',
             description: 'Uploaded addon',
             author: { name: 'User' },
-            openaidy: { minVersion: '1.0.0' },
+            aidy: { minVersion: '1.0.0' },
             entry: './dist/index.js',
             permissions: [],
             ui: {
@@ -973,7 +973,7 @@ export function AddonsPage() {
       const response = await fetch(`/api/addons/${addon.addonId}/${endpoint}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('openaidy_auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('aidy_auth_token')}`,
         },
         body: addon.status === 'installed' ? JSON.stringify({
           approvedPermissions: addon.manifest.permissions.map(p => {
@@ -1010,7 +1010,7 @@ export function AddonsPage() {
       const response = await fetch(`/api/addons/${addon.addonId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('openaidy_auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('aidy_auth_token')}`,
         },
       });
 
@@ -1056,7 +1056,7 @@ export function AddonsPage() {
   return (
     <Layout
       title="Addons"
-      description="Manage OpenAidy addons and extensions"
+      description="Manage Aidy addons and extensions"
       actions={
         <button
           onClick={() => setShowInstallForm(true)}
@@ -1164,7 +1164,7 @@ export function AddonsPage() {
               <Puzzle class="w-12 h-12 text-text-tertiary mx-auto mb-4" />
               <p class="text-text-secondary font-medium">No addons installed</p>
               <p class="text-sm text-text-tertiary mt-1">
-                Install your first addon to extend OpenAidy's functionality
+                Install your first addon to extend Aidy's functionality
               </p>
             </div>
           </Show>
@@ -1271,7 +1271,7 @@ export function App() {
       await initializeRouter();
 
       // Set up global notification system
-      window.__OPENAIDY_NOTIFICATIONS__ = {
+      window.__AIDY_NOTIFICATIONS__ = {
         show: (message: string, type: 'info' | 'success' | 'error') => {
           // TODO: Implement proper notification system
           console.log(`[${type.toUpperCase()}] ${message}`);
@@ -1411,7 +1411,7 @@ export function HistoryPage() {
 ```typescript
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AddonLoader } from './addon-loader';
-import type { AddonRecord } from '@openaidy/shared-types';
+import type { AddonRecord } from '@aidyagent/shared-types';
 
 describe('AddonLoader', () => {
   let addonLoader: AddonLoader;
@@ -1428,7 +1428,7 @@ describe('AddonLoader', () => {
       version: '1.0.0',
       description: 'Test addon',
       author: { name: 'Test' },
-      openaidy: { minVersion: '1.0.0' },
+      aidy: { minVersion: '1.0.0' },
       entry: './dist/index.js',
       permissions: [],
       ui: {
@@ -1539,4 +1539,4 @@ After Phase 2 completion:
 - Build addon development tools and templates
 - Test with real addon implementations
 
-This phase provides the complete frontend foundation that enables addons to be seamlessly integrated into the OpenAidy user experience while maintaining security and performance.
+This phase provides the complete frontend foundation that enables addons to be seamlessly integrated into the Aidy user experience while maintaining security and performance.

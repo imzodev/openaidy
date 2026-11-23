@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { AccessTokensStore } from '@openaidy/db';
-import type { AccessTokenRecord } from '@openaidy/shared-types';
+import type { AccessTokensStore } from '@aidyagent/db';
+import type { AccessTokenRecord } from '@aidyagent/shared-types';
 
 const KEY_PREFIX_LENGTH = 8;
 const TOKEN_BYTES = 32;
-const TOKEN_VERSION = 'oat'; // openaidy access token
+const TOKEN_VERSION = 'oat'; // aidy access token
 
 function generateRawToken(): string {
   return `${TOKEN_VERSION}_${randomBytes(TOKEN_BYTES).toString('hex')}`;

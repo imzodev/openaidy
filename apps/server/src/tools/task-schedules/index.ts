@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { createTaskSchedulesListTool } from './list.js';
 import { createTaskSchedulesCreateTool } from './create.js';
 import { createTaskSchedulesUpdateTool } from './update.js';

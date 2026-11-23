@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# openaidy-service — Wrapper script for the OpenAidy background service
+# aidy-service — Wrapper script for the Aidy background service
 #
 # This is installed as the ExecStart for the systemd service or LaunchAgent.
 # It sets up the environment and launches the server.
 
 set -e
 
-OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.config/openaidy}"
-export OPENAIDY_HOME
+AIDY_HOME="${AIDY_HOME:-$HOME/.config/aidy}"
+export AIDY_HOME
 
 # Load environment
-if [ -f "$OPENAIDY_HOME/.env" ]; then
+if [ -f "$AIDY_HOME/.env" ]; then
   set -a
-  source "$OPENAIDY_HOME/.env"
+  source "$AIDY_HOME/.env"
   set +a
 fi
 

@@ -289,7 +289,7 @@ describe('AgentRegistry', () => {
     }
 
     beforeEach(() => {
-      configPath = path.join(tempDir, 'openaidy.json');
+      configPath = path.join(tempDir, 'aidy.json');
       writeConfig([
         {
           id: 'agent1',
@@ -422,7 +422,7 @@ describe('AgentRegistry', () => {
     ) {
       const dir = path.join(tempDir, 'config');
       fs.mkdirSync(dir, { recursive: true });
-      configPath = path.join(dir, 'openaidy.json');
+      configPath = path.join(dir, 'aidy.json');
       fs.writeFileSync(
         configPath,
         JSON.stringify({
@@ -444,7 +444,7 @@ describe('AgentRegistry', () => {
     }
 
     beforeEach(() => {
-      configPath = path.join(tempDir, 'openaidy.json');
+      configPath = path.join(tempDir, 'aidy.json');
       writeConfig([
         {
           id: 'agent1',
@@ -573,7 +573,7 @@ describe('AgentRegistry', () => {
     ) {
       const dir = path.join(tempDir, 'config-mcp');
       fs.mkdirSync(dir, { recursive: true });
-      configPath = path.join(dir, 'openaidy.json');
+      configPath = path.join(dir, 'aidy.json');
       fs.writeFileSync(
         configPath,
         JSON.stringify({
@@ -754,8 +754,8 @@ describe('AgentRegistry', () => {
       expect(summary!.name).toBe('Gamma');
     });
 
-    it('persists the deletion to openaidy.json', () => {
-      const configPath = path.join(tempDir, 'openaidy.json');
+    it('persists the deletion to aidy.json', () => {
+      const configPath = path.join(tempDir, 'aidy.json');
       const config = {
         version: 1,
         agents: [
@@ -812,7 +812,7 @@ describe('AgentRegistry', () => {
 
   describe('createAgent with identity', () => {
     it('persists the identity field in memory and to disk', () => {
-      const configPath = path.join(tempDir, 'openaidy.json');
+      const configPath = path.join(tempDir, 'aidy.json');
       fs.writeFileSync(configPath, JSON.stringify({ version: 1, agents: [] }));
 
       const registry = new AgentRegistry({ configPath });
@@ -858,7 +858,7 @@ describe('AgentRegistry', () => {
     let configPath: string;
 
     beforeEach(() => {
-      configPath = path.join(tempDir, 'openaidy.json');
+      configPath = path.join(tempDir, 'aidy.json');
       fs.writeFileSync(
         configPath,
         JSON.stringify({

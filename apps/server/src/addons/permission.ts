@@ -4,7 +4,7 @@
  * Fine-grained permission checking and validation for addon access control.
  */
 
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 // ============================================================================
 // Permission Types

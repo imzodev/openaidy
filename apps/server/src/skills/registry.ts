@@ -7,7 +7,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { SkillLoadError } from '@openaidy/shared-types';
+import type { SkillLoadError } from '@aidyagent/shared-types';
 import { parseSkillMd } from './parser.js';
 import type { SkillDefinition } from './parser.js';
 

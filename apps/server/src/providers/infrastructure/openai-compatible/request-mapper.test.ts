@@ -3,8 +3,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mapMessage, mapMessages, mapTool, mapToolChoice, mapRequest } from './request-mapper';
-import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
+import {
+  mapMessage,
+  mapMessages,
+  mapTool,
+  mapToolChoice,
+  mapRequest,
+} from './request-mapper';
+import type { Message, ModelRequest, ToolDefinition } from '@aidyagent/runtime';
 
 describe('mapMessage', () => {
   it('should map system message', () => {
@@ -42,7 +48,11 @@ describe('mapMessage', () => {
       role: 'assistant',
       content: 'Let me check that.',
       toolCalls: [
-        { id: 'call_123', name: 'get_weather', arguments: '{"city": "Berlin"}' },
+        {
+          id: 'call_123',
+          name: 'get_weather',
+          arguments: '{"city": "Berlin"}',
+        },
       ],
     };
     const result = mapMessage(message);
@@ -51,7 +61,11 @@ describe('mapMessage', () => {
       role: 'assistant',
       content: 'Let me check that.',
       tool_calls: [
-        { id: 'call_123', type: 'function', function: { name: 'get_weather', arguments: '{"city": "Berlin"}' } },
+        {
+          id: 'call_123',
+          type: 'function',
+          function: { name: 'get_weather', arguments: '{"city": "Berlin"}' },
+        },
       ],
     });
   });
@@ -132,9 +146,7 @@ describe('mapRequest', () => {
   it('should map basic request', () => {
     const request: ModelRequest = {
       model: 'gpt-4',
-      messages: [
-        { role: 'user', content: 'Hello' },
-      ],
+      messages: [{ role: 'user', content: 'Hello' }],
     };
 
     const result = mapRequest(request);
@@ -154,7 +166,13 @@ describe('mapRequest', () => {
       topP: 0.9,
       stopSequences: ['STOP'],
       stream: true,
-      tools: [{ name: 'test', description: 'Test tool', parameters: { type: 'object' } }],
+      tools: [
+        {
+          name: 'test',
+          description: 'Test tool',
+          parameters: { type: 'object' },
+        },
+      ],
       toolChoice: 'auto',
       metadata: { key: 'value' },
     };

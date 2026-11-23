@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { ChannelRegistry } from '../../channels';
 import { formatToolError, requireString } from '../shared.js';
 import { channelSendMeta } from '../catalog.js';

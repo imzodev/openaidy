@@ -1,5 +1,5 @@
 ---
-summary: 'openaidy.json, the Settings UI tabs, and the execution tuning knobs'
+summary: 'aidy.json, the Settings UI tabs, and the execution tuning knobs'
 read_when:
   - You want to change defaults, tune retry/context limits, or edit the raw config
 title: 'Configuration'
@@ -7,7 +7,7 @@ title: 'Configuration'
 
 # Configuration
 
-OpenAidy's configuration lives in one file — `openaidy.json`, under your `OPENAIDY_HOME` directory (`~/.openaidy` by default). You can edit it through **Settings** in the web UI, or directly as JSON.
+Aidy's configuration lives in one file — `aidy.json`, under your `AIDY_HOME` directory (`~/.aidy` by default). You can edit it through **Settings** in the web UI, or directly as JSON.
 
 ## Settings tabs
 
@@ -31,7 +31,7 @@ Changes here take effect on the next subtask run — no restart needed.
 
 ## Channels and MCP servers
 
-Configured [channels](./channels.md) and [MCP servers](./mcp-servers.md) also live in `openaidy.json`, but are managed from their own pages (Channels, MCP) rather than Settings.
+Configured [channels](./channels.md) and [MCP servers](./mcp-servers.md) also live in `aidy.json`, but are managed from their own pages (Channels, MCP) rather than Settings.
 
 ## Per-model pricing overrides
 
@@ -39,4 +39,4 @@ If a model's built-in cost-per-token reference is missing or wrong, you can add 
 
 ## Editing the raw file
 
-Everything above is stored the same way whether you use a tab or the Raw JSON view — there's no hidden state. If you edit `openaidy.json` directly on disk instead of through the UI, restart the server (or reload config) to pick up the change.
+Everything above is stored the same way whether you use a tab or the Raw JSON view — there's no hidden state. If you edit `aidy.json` directly on disk instead of through the UI, restart the server (or reload config) to pick up the change.

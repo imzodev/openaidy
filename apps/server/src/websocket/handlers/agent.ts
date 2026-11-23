@@ -18,7 +18,7 @@ import {
   type AgentGetResponse,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Agent Handler Class

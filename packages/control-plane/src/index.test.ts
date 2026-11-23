@@ -1,15 +1,15 @@
 /**
- * Public surface test for @openaidy/control-plane
+ * Public surface test for @aidyagent/control-plane
  *
  * Verifies that the symbols the CLI depends on are re-exported from the
- * package entrypoint, so PR1's `openaidy init` command can import them
+ * package entrypoint, so PR1's `aidy init` command can import them
  * without reaching into private paths.
  */
 
 import { describe, expect, it } from 'vitest';
 import * as controlPlane from './index.js';
 
-describe('@openaidy/control-plane public surface', () => {
+describe('@aidyagent/control-plane public surface', () => {
   it('re-exports BootstrapAdminWorkflow', () => {
     expect(controlPlane.BootstrapAdminWorkflow).toBeDefined();
     expect(typeof controlPlane.BootstrapAdminWorkflow).toBe('function');

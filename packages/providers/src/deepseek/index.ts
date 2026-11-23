@@ -2,7 +2,7 @@
  * DeepSeek Provider Profile
  *
  * Reads `id`, `name`, `baseUrl`, and the model list from
- * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
+ * `PROVIDER_PRESETS` (in `@aidyagent/shared-types`) — the single
  * source of truth.
  *
  * Handles DeepSeek's thinking/reasoning block streaming and
@@ -11,7 +11,7 @@
  * OpenAI-compatible adapter.
  */
 
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 import { type HookContext, type StreamChunk } from '../hooks';
 

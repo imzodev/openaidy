@@ -55,9 +55,9 @@ describe('Documentation Validation', () => {
       : '';
 
     it('documents token location', () => {
-      expect(
-        bootstrap.includes('.openaidy/credentials/bootstrap-admin.json'),
-      ).toBe(true);
+      expect(bootstrap.includes('.aidy/credentials/bootstrap-admin.json')).toBe(
+        true,
+      );
     });
 
     it('documents admin token show command', () => {
@@ -78,7 +78,7 @@ describe('Documentation Validation', () => {
       : '';
 
     it('documents repo-local execution', () => {
-      expect(gettingStarted.includes('pnpm openaidy')).toBe(true);
+      expect(gettingStarted.includes('pnpm aidy')).toBe(true);
     });
 
     it('documents devices list command', () => {
@@ -107,9 +107,9 @@ describe('Documentation Validation', () => {
     const arch = existsSync(archPath) ? readFileSync(archPath, 'utf-8') : '';
 
     it('documents package structure', () => {
-      expect(arch.includes('@openaidy/cli')).toBe(true);
-      expect(arch.includes('@openaidy/control-plane')).toBe(true);
-      expect(arch.includes('@openaidy/server')).toBe(true);
+      expect(arch.includes('@aidyagent/cli')).toBe(true);
+      expect(arch.includes('@aidyagent/control-plane')).toBe(true);
+      expect(arch.includes('@aidyagent/server')).toBe(true);
     });
 
     it('documents workflow pattern', () => {
@@ -136,11 +136,11 @@ describe('Documentation Validation', () => {
     });
 
     it('documents running via pnpm', () => {
-      expect(install.includes('pnpm openaidy')).toBe(true);
+      expect(install.includes('pnpm aidy')).toBe(true);
     });
 
     it('documents future global installation', () => {
-      expect(install.includes('npm install -g @openaidy/cli')).toBe(true);
+      expect(install.includes('npm install -g @aidyagent/cli')).toBe(true);
     });
   });
 

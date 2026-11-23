@@ -22,8 +22,8 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BuiltinTool } from '@openaidy/runtime';
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import type { AddonManifest } from '@aidyagent/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
 import type { AddonToolDeps } from './create.js';
 import { buildSdkUsageComment } from './create.js';
@@ -60,13 +60,13 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
     name: addonUpdateMeta.name,
 
     description: [
-      'Modify an EXISTING OpenAidy addon. The addon must already exist (use',
+      'Modify an EXISTING Aidy addon. The addon must already exist (use',
       'addon_create for new ones). Changes take effect when the addon is',
       'reloaded in the UI — no server restart needed.',
       '',
       'WHERE ADDONS LIVE',
       '─────────────────',
-      'Addons live in a dedicated directory managed by OpenAidy, SEPARATE from',
+      'Addons live in a dedicated directory managed by Aidy, SEPARATE from',
       'your agent workspace. Your workspace_write / code_edit / exec_run tools',
       'operate on the workspace and CANNOT patch an addon in a way the addon',
       'loader picks up — files written there are ignored by the addon system.',
@@ -98,7 +98,7 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
       '  • You cannot delete app/index.html or app/index.js (required to run).',
       '  • If you overwrite app/index.html it MUST still load the SDK before',
       '    the addon script, in this order, just before </body>:',
-      '      <script src="/sdk/openaidy-sdk.js"></script>',
+      '      <script src="/sdk/aidy-sdk.js"></script>',
       '      <script src="index.js"></script>',
       '',
       'EXTERNAL DOMAINS',

@@ -21,14 +21,14 @@ describe('tauri-bridge', () => {
         port: 3001,
         restart_attempts: 0,
         pid: 12345,
-        openaidy_home: '/home/user/.config/openaidy',
+        aidy_home: '/home/user/.config/aidy',
       };
 
       expect(status.state).toBe('Running');
       expect(typeof status.port).toBe('number');
       expect(typeof status.restart_attempts).toBe('number');
       expect(status.pid).toBe(12345);
-      expect(typeof status.openaidy_home).toBe('string');
+      expect(typeof status.aidy_home).toBe('string');
     });
   });
 
@@ -40,7 +40,7 @@ describe('tauri-bridge', () => {
           port: 3001,
           restart_attempts: 0,
           pid: 12345,
-          openaidy_home: '/home/user/.config/openaidy',
+          aidy_home: '/home/user/.config/aidy',
         }),
       };
 
@@ -153,7 +153,7 @@ describe('tauri-provider', () => {
           port: 3001,
           restart_attempts: 0,
           pid: 12345,
-          openaidy_home: '/home/user/.config/openaidy',
+          aidy_home: '/home/user/.config/aidy',
         }),
         isConnected: () => true,
       };
@@ -170,7 +170,7 @@ describe('tauri-provider', () => {
           port: 3001,
           restart_attempts: 0,
           pid: 12345,
-          openaidy_home: '/home/user/.config/openaidy',
+          aidy_home: '/home/user/.config/aidy',
         };
         return s !== null && s.state === 'Running';
       };
@@ -185,7 +185,7 @@ describe('tauri-provider', () => {
           port: null,
           restart_attempts: 0,
           pid: null,
-          openaidy_home: '/home/user/.config/openaidy',
+          aidy_home: '/home/user/.config/aidy',
         };
         return s !== null && s.state === 'Running';
       };

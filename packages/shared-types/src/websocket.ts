@@ -1,5 +1,5 @@
 /**
- * WebSocket Message Types for OpenAidy
+ * WebSocket Message Types for Aidy
  *
  * This file contains all shared types for WebSocket communication
  * between the server and client SDKs.

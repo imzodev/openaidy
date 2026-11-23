@@ -42,13 +42,13 @@ Desktop App Tests
 
 ### Phase 1: Core Service
 
-| #   | Test                         | Command/Action                      | Expected                         | Status |
-| --- | ---------------------------- | ----------------------------------- | -------------------------------- | ------ |
-| 1.1 | Server starts on random port | Run `apps/server` with `PORT=0`     | Binds to a free port, logs it    |        |
-| 1.2 | Server reads OPENAIDY_HOME   | Set `OPENAIDY_HOME=/tmp/test`       | Uses `/tmp/test` for `.openaidy` |        |
-| 1.3 | SQLite database created      | Run with fresh `OPENAIDY_HOME`      | `openaidy.db` created            |        |
-| 1.4 | CORS origin enforced         | CORS_ORIGIN=app://0.0.0.0           | Browser requests blocked         |        |
-| 1.5 | Health endpoint responds     | `curl http://localhost:PORT/health` | `200 OK`                         |        |
+| #   | Test                         | Command/Action                      | Expected                      | Status |
+| --- | ---------------------------- | ----------------------------------- | ----------------------------- | ------ |
+| 1.1 | Server starts on random port | Run `apps/server` with `PORT=0`     | Binds to a free port, logs it |        |
+| 1.2 | Server reads AIDY_HOME       | Set `AIDY_HOME=/tmp/test`           | Uses `/tmp/test` for `.aidy`  |        |
+| 1.3 | SQLite database created      | Run with fresh `AIDY_HOME`          | `aidy.db` created             |        |
+| 1.4 | CORS origin enforced         | CORS_ORIGIN=app://0.0.0.0           | Browser requests blocked      |        |
+| 1.5 | Health endpoint responds     | `curl http://localhost:PORT/health` | `200 OK`                      |        |
 
 ### Phase 2: Tauri Shell
 
@@ -62,13 +62,13 @@ Desktop App Tests
 
 ### Phase 3: Service Manager
 
-| #   | Test                      | Command/Action                               | Expected                           | Status |
-| --- | ------------------------- | -------------------------------------------- | ---------------------------------- | ------ |
-| 3.1 | Service restarts on crash | Kill the server process                      | Restarted within 5s, max 3 times   |        |
-| 3.2 | Port file updated         | After restart, `cat ~/.config/openaidy/port` | New port written                   |        |
-| 3.3 | Graceful shutdown         | Click Quit in tray                           | SIGTERM sent, server exits cleanly |        |
-| 3.4 | SIGKILL after timeout     | Server ignores SIGTERM 10s                   | SIGKILL applied after timeout      |        |
-| 3.5 | `get_service_status` IPC  | Call from frontend                           | Returns correct state/port         |        |
+| #   | Test                      | Command/Action                           | Expected                           | Status |
+| --- | ------------------------- | ---------------------------------------- | ---------------------------------- | ------ |
+| 3.1 | Service restarts on crash | Kill the server process                  | Restarted within 5s, max 3 times   |        |
+| 3.2 | Port file updated         | After restart, `cat ~/.config/aidy/port` | New port written                   |        |
+| 3.3 | Graceful shutdown         | Click Quit in tray                       | SIGTERM sent, server exits cleanly |        |
+| 3.4 | SIGKILL after timeout     | Server ignores SIGTERM 10s               | SIGKILL applied after timeout      |        |
+| 3.5 | `get_service_status` IPC  | Call from frontend                       | Returns correct state/port         |        |
 
 ### Phase 4: Credential Storage
 
@@ -92,13 +92,13 @@ Desktop App Tests
 
 ### Phase 6: System Tray
 
-| #   | Test                  | Command/Action        | Expected                      | Status |
-| --- | --------------------- | --------------------- | ----------------------------- | ------ |
-| 6.1 | Tray icon appears     | Launch app            | Icon visible in system tray   |        |
-| 6.2 | Left-click tray       | Click tray icon       | Window shows and focuses      |        |
-| 6.3 | Right-click tray menu | Right-click tray      | Menu: "Open OpenAidy", "Quit" |        |
-| 6.4 | Open from tray        | Click "Open OpenAidy" | Window appears                |        |
-| 6.5 | Quit from tray        | Click "Quit"          | App + service exit            |        |
+| #   | Test                  | Command/Action    | Expected                    | Status |
+| --- | --------------------- | ----------------- | --------------------------- | ------ |
+| 6.1 | Tray icon appears     | Launch app        | Icon visible in system tray |        |
+| 6.2 | Left-click tray       | Click tray icon   | Window shows and focuses    |        |
+| 6.3 | Right-click tray menu | Right-click tray  | Menu: "Open Aidy", "Quit"   |        |
+| 6.4 | Open from tray        | Click "Open Aidy" | Window appears              |        |
+| 6.5 | Quit from tray        | Click "Quit"      | App + service exit          |        |
 
 ### Phase 7: Window Management
 
@@ -112,14 +112,14 @@ Desktop App Tests
 
 ### Phase 8: Service Installation
 
-| #   | Test                          | Command/Action                     | Expected                           | Status |
-| --- | ----------------------------- | ---------------------------------- | ---------------------------------- | ------ |
-| 8.1 | Linux: systemd install        | `systemctl --user enable openaidy` | Service enabled                    |        |
-| 8.2 | Linux: service starts on boot | Reboot                             | Service running on login           |        |
-| 8.3 | macOS: LaunchAgent install    | `launchctl load` plist             | Service active in `launchctl list` |        |
-| 8.4 | macOS: runs on login          | Log out + in                       | App appears in menu bar            |        |
-| 8.5 | Windows: task registered      | `schtasks /Query /TN OpenAidy`     | Task exists                        |        |
-| 8.6 | Uninstall removes service     | Uninstall app                      | Service/task removed               |        |
+| #   | Test                          | Command/Action                 | Expected                           | Status |
+| --- | ----------------------------- | ------------------------------ | ---------------------------------- | ------ |
+| 8.1 | Linux: systemd install        | `systemctl --user enable aidy` | Service enabled                    |        |
+| 8.2 | Linux: service starts on boot | Reboot                         | Service running on login           |        |
+| 8.3 | macOS: LaunchAgent install    | `launchctl load` plist         | Service active in `launchctl list` |        |
+| 8.4 | macOS: runs on login          | Log out + in                   | App appears in menu bar            |        |
+| 8.5 | Windows: task registered      | `schtasks /Query /TN Aidy`     | Task exists                        |        |
+| 8.6 | Uninstall removes service     | Uninstall app                  | Service/task removed               |        |
 
 ### Phase 9: Addon System
 
@@ -132,13 +132,13 @@ Desktop App Tests
 
 ### Phase 10: Installers
 
-| #    | Test                        | Command/Action         | Expected                      | Status |
-| ---- | --------------------------- | ---------------------- | ----------------------------- | ------ |
-| 10.1 | `.deb` install              | `dpkg -i openaidy.deb` | Installs, icon appears        |        |
-| 10.2 | `.dmg` drag to Applications | Copy to Applications   | App launches                  |        |
-| 10.3 | `.exe`/`.msi` install       | Run installer          | App installs to Program Files |        |
-| 10.4 | Uninstaller works           | `dpkg -r openaidy`     | App removed cleanly           |        |
-| 10.5 | App runs after install      | Launch from app grid   | Full functionality            |        |
+| #    | Test                        | Command/Action       | Expected                      | Status |
+| ---- | --------------------------- | -------------------- | ----------------------------- | ------ |
+| 10.1 | `.deb` install              | `dpkg -i aidy.deb`   | Installs, icon appears        |        |
+| 10.2 | `.dmg` drag to Applications | Copy to Applications | App launches                  |        |
+| 10.3 | `.exe`/`.msi` install       | Run installer        | App installs to Program Files |        |
+| 10.4 | Uninstaller works           | `dpkg -r aidy`       | App removed cleanly           |        |
+| 10.5 | App runs after install      | Launch from app grid | Full functionality            |        |
 
 ## Automated Smoke Tests
 
@@ -194,21 +194,21 @@ Measure with:
 
 ```bash
 # Startup time
-time openaidy  # from install
+time aidy  # from install
 
 # Memory
-ps aux | grep openaidy | awk '{print $6}'  # RSS in KB
+ps aux | grep aidy | awk '{print $6}'  # RSS in KB
 ```
 
 ## Security Verification
 
-| Test                           | Method                                        | Expected                        |
-| ------------------------------ | --------------------------------------------- | ------------------------------- | ----------------- |
-| API keys not in plaintext      | Check `~/.config/openaidy/.env` after storing | Only `OPENAIDY_HOME`, no keys   |
-| CSP blocks external requests   | Network tab in DevTools                       | No requests outside `127.0.0.1` |
-| Server runs as non-root        | `ps aux                                       | grep server`                    | No root processes |
-| Keychain entries scoped to app | `security list-keychains`                     | `openaidy` keychain only        |
-| No secrets in binary           | `strings openaidy-desktop \| grep sk-`        | Empty                           |
+| Test                           | Method                                    | Expected                        |
+| ------------------------------ | ----------------------------------------- | ------------------------------- | ----------------- |
+| API keys not in plaintext      | Check `~/.config/aidy/.env` after storing | Only `AIDY_HOME`, no keys       |
+| CSP blocks external requests   | Network tab in DevTools                   | No requests outside `127.0.0.1` |
+| Server runs as non-root        | `ps aux                                   | grep server`                    | No root processes |
+| Keychain entries scoped to app | `security list-keychains`                 | `aidy` keychain only            |
+| No secrets in binary           | `strings aidy-desktop \| grep sk-`        | Empty                           |
 
 ## Risks & Known Issues
 

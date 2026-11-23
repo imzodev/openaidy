@@ -72,7 +72,7 @@ packages/providers/
 
 ```json
 {
-  "name": "@openaidy/providers",
+  "name": "@aidyagent/providers",
   "version": "0.1.0",
   "description": "Provider profile registry — declarative provider config with runtime hooks",
   "main": "./dist/index.js",
@@ -91,7 +91,7 @@ packages/providers/
     "test": "vitest run"
   },
   "dependencies": {
-    "@openaidy/shared-types": "workspace:*"
+    "@aidyagent/shared-types": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.0.0"
@@ -114,7 +114,7 @@ packages/providers/
 
 **Step 3: Run build to verify scaffold**
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm install` (or `pnpm add -w` from repo root)
+Run: `cd /tmp/aidy/packages/providers && pnpm install` (or `pnpm add -w` from repo root)
 Expected: no errors
 
 ---
@@ -157,7 +157,7 @@ describe('ProviderProfile', () => {
 });
 ```
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test -- types.test.ts`
+Run: `cd /tmp/aidy/packages/providers && pnpm test -- types.test.ts`
 Expected: FAIL — `ProviderProfile` not defined
 
 **Step 2: Write the types**
@@ -498,12 +498,12 @@ export type PrepareMessagesHook = (
 
 **Step 4: Verify types compile**
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm build`
+Run: `cd /tmp/aidy/packages/providers && pnpm build`
 Expected: no errors (dist/ types generated)
 
 **Step 5: Run types test**
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test -- types.test.ts`
+Run: `cd /tmp/aidy/packages/providers && pnpm test -- types.test.ts`
 Expected: 2 passed
 
 ---
@@ -563,7 +563,7 @@ describe('ProviderRegistry', () => {
 });
 ```
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test -- registry.test.ts`
+Run: `cd /tmp/aidy/packages/providers && pnpm test -- registry.test.ts`
 Expected: FAIL — `registry.ts` not found
 
 **Step 2: Write the registry**
@@ -704,7 +704,7 @@ export const registry = new ProviderRegistry();
 
 **Step 3: Run tests**
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test -- registry.test.ts`
+Run: `cd /tmp/aidy/packages/providers && pnpm test -- registry.test.ts`
 Expected: 4 passed
 
 ---
@@ -830,7 +830,7 @@ describe('DeepSeekProfile', () => {
 });
 ```
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test -- deepseek/deepseek.test.ts`
+Run: `cd /tmp/aidy/packages/providers && pnpm test -- deepseek/deepseek.test.ts`
 Expected: FAIL — `index.ts` doesn't exist
 
 **Step 2: Write the DeepSeek profile**
@@ -973,7 +973,7 @@ registry.register(new DeepSeekProfile());
 
 **Step 3: Run tests**
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test -- deepseek/deepseek.test.ts`
+Run: `cd /tmp/aidy/packages/providers && pnpm test -- deepseek/deepseek.test.ts`
 Expected: All 9 tests pass
 
 ---
@@ -1029,7 +1029,7 @@ OpenRouter aggregates 200+ models. Key quirks:
 
 **Step 4: Write tests for each**
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test`
+Run: `cd /tmp/aidy/packages/providers && pnpm test`
 Expected: All provider profile tests pass
 
 ---
@@ -1059,7 +1059,7 @@ Replace each with a profile hook call.
 **Step 2: Add registry import to adapter**
 
 ```typescript
-import { registry } from '@openaidy/providers/registry';
+import { registry } from '@aidyagent/providers/registry';
 ```
 
 **Step 3: Replace isDeepSeek branching**
@@ -1132,7 +1132,7 @@ if (Object.keys(extraBody).length > 0) {
 // Tests that the adapter calls profile hooks correctly for DeepSeek/minimax
 ```
 
-Run: `pnpm --filter @openaidy/server test -- adapter-profile.test.ts`
+Run: `pnpm --filter @aidyagent/server test -- adapter-profile.test.ts`
 Expected: All pass
 
 ---
@@ -1152,11 +1152,11 @@ Expected: All pass
 ```typescript
 // packages/config/src/provider/base.ts
 
-import { ProviderProfile } from '@openaidy/providers/types';
+import { ProviderProfile } from '@aidyagent/providers/types';
 
 /**
  * Convert an appProviderConfig (the config file shape) into a ProviderProfile.
- * This lets users configure providers in openaidy.yaml and get profile hooks.
+ * This lets users configure providers in aidy.yaml and get profile hooks.
  */
 export function profileFromConfig(config: AppProviderConfig): ProviderProfile {
   return ProviderProfile.create({
@@ -1193,8 +1193,8 @@ export function profileFromConfig(config: AppProviderConfig): ProviderProfile {
 ```typescript
 // apps/server/src/providers/config-service.ts
 
-import { registry } from '@openaidy/providers/registry';
-import { profileFromConfig } from '@openaidy/config/provider/base';
+import { registry } from '@aidyagent/providers/registry';
+import { profileFromConfig } from '@aidyagent/config/provider/base';
 
 export class ProviderConfigService {
   // ...
@@ -1262,7 +1262,7 @@ export function getPreset(id: string): ProviderProfile | undefined {
 
 ```typescript
 // packages/shared-types/src/providers-preset.ts
-// Add: export type { ProviderProfile } from '@openaidy/providers';
+// Add: export type { ProviderProfile } from '@aidyagent/providers';
 // Keep the existing ProviderPreset type but have it derive from providers
 ```
 
@@ -1293,7 +1293,7 @@ export function getPreset(id: string): ProviderProfile | undefined {
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { registry } from './registry';
-import { profileFromConfig } from '@openaidy/config/src/provider/base';
+import { profileFromConfig } from '@aidyagent/config/src/provider/base';
 
 describe('Provider profile integration', () => {
   it('should resolve deepseek profile from registry', () => {
@@ -1344,7 +1344,7 @@ describe('Provider profile integration', () => {
 });
 ```
 
-Run: `cd /tmp/openaidy/packages/providers && pnpm test`
+Run: `cd /tmp/aidy/packages/providers && pnpm test`
 Expected: All tests pass (registry + all provider profiles + integration)
 
 ---
@@ -1353,16 +1353,16 @@ Expected: All tests pass (registry + all provider profiles + integration)
 
 ```bash
 # Build the providers package
-cd /tmp/openaidy/packages/providers && pnpm build
+cd /tmp/aidy/packages/providers && pnpm build
 
 # Run providers tests
-cd /tmp/openaidy/packages/providers && pnpm test
+cd /tmp/aidy/packages/providers && pnpm test
 
 # Run server tests (should still pass with adapter wired to profiles)
-cd /tmp/openaidy && pnpm --filter @openaidy/server test -- adapter-profile.test.ts
+cd /tmp/aidy && pnpm --filter @aidyagent/server test -- adapter-profile.test.ts
 
 # Run full test suite (all packages)
-cd /tmp/openaidy && pnpm test
+cd /tmp/aidy && pnpm test
 ```
 
 Expected: All tests pass, no regressions in existing functionality.

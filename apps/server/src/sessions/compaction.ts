@@ -1,7 +1,7 @@
 import {
   COMPACTION_SUMMARY_KIND,
   type CompactionSourceMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /** Recent user turns (and everything after them) always kept verbatim. */
 export const COMPACTION_KEEP_USER_TURNS = 4;

@@ -1,7 +1,7 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { jobsCreateMeta } from '../catalog.js';
 import type { PulseToolDeps } from './types.js';
-import type { CreatePulseInput } from '@openaidy/shared-types';
+import type { CreatePulseInput } from '@aidyagent/shared-types';
 
 export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
   return {
@@ -109,7 +109,7 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
       }
 
       // Build ScheduleInput discriminated union from tool args
-      let scheduleInput: import('@openaidy/shared-types').ScheduleInput;
+      let scheduleInput: import('@aidyagent/shared-types').ScheduleInput;
       if (schedule['every']) {
         scheduleInput = {
           every: schedule['every'] as

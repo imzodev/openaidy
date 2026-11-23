@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TaskScheduleService } from './schedule-service';
 import type { TaskScheduleServiceDeps } from '../types';
-import type { Task, TaskSchedule, TaskExecutionHistoryRow } from '@openaidy/db';
+import type {
+  Task,
+  TaskSchedule,
+  TaskExecutionHistoryRow,
+} from '@aidyagent/db';
 
 // ============================================================================
 // Factories (in-memory fakes matching the DB shape)

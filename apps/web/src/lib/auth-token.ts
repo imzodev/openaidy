@@ -6,7 +6,7 @@
  * 2. localStorage persisted token
  */
 
-const STORAGE_KEY = 'openaidy_auth_token';
+const STORAGE_KEY = 'aidy_auth_token';
 const URL_TOKEN_PARAM = 'token';
 
 export function getTokenFromUrl(): string | undefined {

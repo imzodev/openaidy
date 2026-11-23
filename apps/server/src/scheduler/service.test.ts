@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { JobsRepository, JobRunsRepository } from '@openaidy/db';
-import type { JobRun } from '@openaidy/db';
+import type { JobsRepository, JobRunsRepository } from '@aidyagent/db';
+import type { JobRun } from '@aidyagent/db';
 import {
   SchedulerService,
   createSchedulerService,
@@ -248,7 +248,7 @@ describe('createSchedulerService', () => {
 // Phase 0 scheduling refactor: ScheduledRunnable registry + dispatch
 // ============================================================================
 
-import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+import type { ScheduledRunnable, ExecutionResult } from '@aidyagent/runtime';
 
 /**
  * Build a minimal `ScheduledRunnable` with vi.fn()s for the three
@@ -282,7 +282,7 @@ function makeRunnable(
         (async () => ({ ok: true as const, durationMs: 5 }))) as (
         id: string,
         payload: unknown,
-      ) => Promise<import('@openaidy/runtime').ExecutionResult>,
+      ) => Promise<import('@aidyagent/runtime').ExecutionResult>,
     ),
     reschedule: vi.fn(options.reschedule ?? (async () => null)),
   };

@@ -1,4 +1,4 @@
-import type { OwnerConfig } from '@openaidy/config';
+import type { OwnerConfig } from '@aidyagent/config';
 import type { PulseService } from '../pulses/service';
 
 /**

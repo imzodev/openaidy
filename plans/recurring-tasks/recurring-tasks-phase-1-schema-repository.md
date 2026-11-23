@@ -13,12 +13,12 @@ This phase is reversible (drop the tables) and unblocks Phases 2-3.
 - Generate Drizzle migration SQL
 - Create `TaskSchedulesRepository` with the standard CRUD + claim operation
 - Create `TaskExecutionHistoryRepository` with paginated queries
-- Add shared types for the new tables to `@openaidy/shared-types`
+- Add shared types for the new tables to `@aidyagent/shared-types`
 - Add unit tests for both repositories using in-memory or test-DB fixtures
 
 ## Success criteria
 
-- `pnpm --filter @openaidy/db generate` produces a valid migration
+- `pnpm --filter @aidyagent/db generate` produces a valid migration
 - The migration applies cleanly to both SQLite and PostgreSQL
 - All repository methods pass unit tests
 - No existing functionality is affected (no schema changes to existing tables)
@@ -574,7 +574,7 @@ export interface Repositories {
 
 ```bash
 # From the repo root
-pnpm --filter @openaidy/db generate
+pnpm --filter @aidyagent/db generate
 ```
 
 This produces a new SQL file in `packages/db/drizzle/`. The migration adds:
@@ -586,11 +586,11 @@ Apply the migration to a development DB and verify the schema with:
 
 ```bash
 # SQLite
-sqlite3 apps/server/data/openaidy.db ".schema task_schedules"
-sqlite3 apps/server/data/openaidy.db ".schema task_execution_history"
+sqlite3 apps/server/data/aidy.db ".schema task_schedules"
+sqlite3 apps/server/data/aidy.db ".schema task_execution_history"
 ```
 
-For PostgreSQL, run `pnpm --filter @openaidy/db migrate` against a test database.
+For PostgreSQL, run `pnpm --filter @aidyagent/db migrate` against a test database.
 
 ### 9. Write repository unit tests
 
@@ -632,7 +632,7 @@ Phase 1 is a data-layer-only change. No runtime behaviour is affected. The table
 
 Rollout steps:
 
-1. Run `pnpm --filter @openaidy/db generate` and commit the migration
+1. Run `pnpm --filter @aidyagent/db generate` and commit the migration
 2. Apply the migration to staging
 3. Verify the tables exist with `\d task_schedules` (Postgres) or `.schema` (SQLite)
 4. Deploy

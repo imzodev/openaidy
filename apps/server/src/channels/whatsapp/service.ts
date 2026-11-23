@@ -6,8 +6,8 @@ import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
 import { EventEmitter } from 'node:events';
 import type { IQrChannel } from '../interface.js';
-import type { ChannelStatus } from '@openaidy/shared-types';
-import type { WhatsAppChannelConfig } from '@openaidy/config';
+import type { ChannelStatus } from '@aidyagent/shared-types';
+import type { WhatsAppChannelConfig } from '@aidyagent/config';
 import type { WhatsAppChannelDeps } from './types.js';
 import { createWhatsAppAuthStore } from './auth-store.js';
 import { handleInboundWhatsAppMessage } from './message-handler.js';
@@ -90,7 +90,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
       version,
       auth: state,
       printQRInTerminal: false,
-      browser: ['OpenAidy', '1.0.0', 'Ubuntu'],
+      browser: ['Aidy', '1.0.0', 'Ubuntu'],
       // A reply bot has no use for chat history. Skip syncing it so the socket
       // isn't busy downloading the full history on every (re)connect — that
       // flood can starve live message processing.

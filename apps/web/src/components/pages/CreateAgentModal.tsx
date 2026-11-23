@@ -10,7 +10,7 @@ import { X, Plus, Sparkles } from 'lucide-solid';
 import {
   AGENT_PERSONALITY_PRESETS,
   type PersonalityPreset,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { Modal } from '../ui/Modal';
 import { PersonalityPresetCard } from './PersonalityPresetCard';
 import {

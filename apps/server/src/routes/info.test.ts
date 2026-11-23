@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { infoRoutes } from './info';
-import { resolveOpenAidyVersion } from '../lib/version';
+import { resolveAidyVersion } from '../lib/version';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -62,18 +62,18 @@ describe('GET /api/info', () => {
   it('reflects the version from a package.json placed near the server file (no env var injection)', async () => {
     // Build a temp package.json in a directory, then run the resolver from
     // inside it. Proves the resolver does NOT read process.env.
-    const root = mkdtempSync(join(tmpdir(), 'openaidy-info-test-'));
+    const root = mkdtempSync(join(tmpdir(), 'aidy-info-test-'));
     const pkgDir = join(root, 'pkg');
     mkdirSync(pkgDir, { recursive: true });
     writeFileSync(
       join(pkgDir, 'package.json'),
-      JSON.stringify({ name: 'openaidy', version: '7.7.7-test' }),
+      JSON.stringify({ name: 'aidy', version: '7.7.7-test' }),
       'utf-8',
     );
     const beforeEnv = process.env['npm_package_version'];
     process.env['npm_package_version'] = '9.9.9-env-override';
     try {
-      const resolved = resolveOpenAidyVersion(pkgDir);
+      const resolved = resolveAidyVersion(pkgDir);
       expect(resolved).toBe('7.7.7-test');
       expect(resolved).not.toBe('9.9.9-env-override');
     } finally {
@@ -85,7 +85,7 @@ describe('GET /api/info', () => {
 
   it('falls back to "0.0.0" when no package.json with version is reachable', async () => {
     // This is hard to test directly without isolating the import.meta.url of
-    // the version module. The unit test for resolveOpenAidyVersion covers the
+    // the version module. The unit test for resolveAidyVersion covers the
     // fallback in detail; here we just assert the field is a string.
     app = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/api/info' });

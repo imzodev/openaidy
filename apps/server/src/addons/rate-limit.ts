@@ -4,7 +4,7 @@
  * Token bucket rate limiting for addon API access.
  */
 
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 // ============================================================================
 // Rate Limit Types

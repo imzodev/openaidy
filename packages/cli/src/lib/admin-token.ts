@@ -2,7 +2,7 @@
  * Bootstrap Admin Token Reader
  *
  * Reads and validates the bootstrap-admin token file so CLI commands
- * can authenticate against the OpenAidy HTTP API.
+ * can authenticate against the Aidy HTTP API.
  *
  * All CLI commands must use this instead of duplicating readAdminToken logic.
  */
@@ -38,22 +38,28 @@ export async function readAdminToken(
   try {
     raw = await readFile(tokenPath, 'utf-8');
   } catch {
-    return { ok: false, error: `Bootstrap admin token not found at ${tokenPath}.` };
+    return {
+      ok: false,
+      error: `Bootstrap admin token not found at ${tokenPath}.`,
+    };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { ok: false, error: `Token file at ${tokenPath} contains invalid JSON.` };
+    return {
+      ok: false,
+      error: `Token file at ${tokenPath} contains invalid JSON.`,
+    };
   }
 
   const record = parsed as Partial<BootstrapAdminRecord>;
-  if (
-    typeof record.token !== 'string' ||
-    record.token.length === 0
-  ) {
-    return { ok: false, error: `Token file at ${tokenPath} has invalid structure (missing "token" field).` };
+  if (typeof record.token !== 'string' || record.token.length === 0) {
+    return {
+      ok: false,
+      error: `Token file at ${tokenPath} has invalid structure (missing "token" field).`,
+    };
   }
 
   return { ok: true, token: record.token };

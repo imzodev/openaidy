@@ -7,7 +7,7 @@ import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import { agentRoutes } from './agents';
-import { AGENT_PERSONALITY_PRESETS } from '@openaidy/shared-types';
+import { AGENT_PERSONALITY_PRESETS } from '@aidyagent/shared-types';
 import { AuthMiddleware } from '../websocket/middleware/auth';
 import { createAgentRegistry } from '../agents';
 import { createAgentPersonalityService } from '../agents/personality-service';

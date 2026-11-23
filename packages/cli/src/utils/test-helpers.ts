@@ -24,7 +24,7 @@ export interface TestResult {
  * Create a temporary test project
  */
 export function createTempProject(name: string = 'test-addon'): TestProject {
-  const projectPath = path.join('/tmp', `openaidy-test-${Date.now()}-${name}`);
+  const projectPath = path.join('/tmp', `aidy-test-${Date.now()}-${name}`);
 
   return {
     path: projectPath,
@@ -146,7 +146,7 @@ export function createMockManifest(
     name: 'Test Addon',
     version: '1.0.0',
     description: 'A test addon for CLI validation',
-    openaidy: {
+    aidy: {
       minVersion: '1.0.0',
       maxVersion: '2.0.0',
     },
@@ -190,7 +190,7 @@ export async function setupTestProject(
     path.join(project.path, 'package.json'),
     JSON.stringify(
       {
-        name: `@openaidy/addon-${name}`,
+        name: `@aidyagent/addon-${name}`,
         version: '1.0.0',
         scripts: {
           test: 'echo "test"',
@@ -220,7 +220,7 @@ export function validateManifestStructure(manifest: Record<string, unknown>): {
   errors: string[];
 } {
   const errors: string[] = [];
-  const required = ['id', 'name', 'version', 'openaidy'];
+  const required = ['id', 'name', 'version', 'aidy'];
 
   for (const field of required) {
     if (!manifest[field]) {

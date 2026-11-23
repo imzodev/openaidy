@@ -6,7 +6,7 @@
  */
 
 import type { WebSocket } from '@fastify/websocket';
-import type { ClientType } from '@openaidy/shared-types';
+import type { ClientType } from '@aidyagent/shared-types';
 import {
   type WebSocketConfig,
   type RateLimitInfo,

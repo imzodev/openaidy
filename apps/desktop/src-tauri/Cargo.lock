@@ -18,6 +18,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aidy-desktop"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dirs 5.0.1",
+ "env_logger",
+ "futures",
+ "keyring",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2608,28 +2630,6 @@ dependencies = [
  "is-wsl",
  "libc",
  "pathdiff",
-]
-
-[[package]]
-name = "openaidy-desktop"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "dirs 5.0.1",
- "env_logger",
- "futures",
- "keyring",
- "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tempfile",
- "tokio",
 ]
 
 [[package]]

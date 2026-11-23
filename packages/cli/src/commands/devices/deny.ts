@@ -1,7 +1,7 @@
 /**
  * Devices Deny Command Handler
  *
- * Implements `openaidy devices deny <request-id>` command.
+ * Implements `aidy devices deny <request-id>` command.
  * Uses the control-plane pairing workflow for denial.
  */
 
@@ -9,7 +9,7 @@ import * as p from '@clack/prompts';
 import {
   createPairingWorkflow,
   type PairingContext,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 import { formatRequest } from '../../formatters/devices.js';
 import type { CommandResult } from '../../types.js';
 
@@ -23,13 +23,13 @@ export function createDevicesDenyHandler(
     if (args.includes('-h') || args.includes('--help')) {
       p.note(
         [
-          'Usage: openaidy devices deny <request-id>',
+          'Usage: aidy devices deny <request-id>',
           '',
           'Arguments:',
           '  request-id    The ID of the pairing request to deny',
           '',
           'Examples:',
-          '  pnpm openaidy devices deny abc123',
+          '  pnpm aidy devices deny abc123',
         ].join('\n'),
         'devices deny',
       );
@@ -40,7 +40,7 @@ export function createDevicesDenyHandler(
 
     if (!requestId) {
       const error =
-        'Error: Missing required argument <request-id>\n\nUsage: openaidy devices deny <request-id>';
+        'Error: Missing required argument <request-id>\n\nUsage: aidy devices deny <request-id>';
       p.log.error(error);
       return { exitCode: 1, error };
     }

@@ -1,6 +1,6 @@
 ---
 name: Addon UI Components Cookbook
-description: Use when writing or reviewing OpenAidy addon UI code (app/index.html, app/index.js) that calls sdk.ui.* — covers component mounting semantics and composed usage patterns beyond the one-line reference in addon_create's tool description.
+description: Use when writing or reviewing Aidy addon UI code (app/index.html, app/index.js) that calls sdk.ui.* — covers component mounting semantics and composed usage patterns beyond the one-line reference in addon_create's tool description.
 version: 1.0.0
 ---
 

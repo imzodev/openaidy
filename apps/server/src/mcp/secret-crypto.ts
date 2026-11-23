@@ -4,7 +4,7 @@
  * MCP server `env`/`headers` values are either a `${VAR}` reference (the
  * secret lives in the process environment, never touches disk) or an inline
  * value pasted straight into the form (e.g. `Authorization: Bearer ghp_xxx`).
- * Inline values are encrypted before they are written to `openaidy.json` so a
+ * Inline values are encrypted before they are written to `aidy.json` so a
  * copy of the config file — a backup, a screen share, a git-tracked dotfile —
  * never exposes the raw credential.
  *

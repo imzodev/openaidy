@@ -10,7 +10,7 @@ import type {
   FinishReason,
   ModelResponse,
   ModelStreamEvent,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type {
   AnthropicMessagesResponse,
   AnthropicContentBlock,

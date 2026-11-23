@@ -4,7 +4,7 @@
  * context handoff always agree on the same dependency semantics.
  */
 
-import type { Subtask } from '@openaidy/db';
+import type { Subtask } from '@aidyagent/db';
 
 export type ConditionOperator = 'equals' | 'contains' | 'matches_regex';
 

@@ -53,7 +53,7 @@ export function generateGitHubActionsWorkflow(
   const testCommand = options.testCommand || 'pnpm test';
   const buildCommand = options.buildCommand || 'pnpm build';
 
-  return `# OpenAidy Addon CI/CD
+  return `# Aidy Addon CI/CD
 name: CI
 
 on:
@@ -112,7 +112,7 @@ jobs:
 export function generateGitLabCIConfig(options: CIGeneratorOptions): string {
   const nodeVersion = options.nodeVersion || '20';
 
-  return `# OpenAidy Addon CI/CD
+  return `# Aidy Addon CI/CD
 stages:
   - test
   - build
@@ -149,7 +149,7 @@ build:
 export function generateJenkinsfile(options: CIGeneratorOptions): string {
   const _nodeVersion = options.nodeVersion || '20';
 
-  return `// OpenAidy Addon CI/CD
+  return `// Aidy Addon CI/CD
 pipeline {
   agent any
   

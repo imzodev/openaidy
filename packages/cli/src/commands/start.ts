@@ -1,19 +1,19 @@
 /**
- * openaidy start — Start the OpenAidy server and web frontend (PR2 T2.2)
+ * aidy start — Start the Aidy server and web frontend (PR2 T2.2)
  *
  * Behavior (per spec R-7):
- *  1. Resolve the listen port (--port flag > OPENAIDY_PORT env > 3001)
- *  2. Resolve apps/server/dist/server.js from OPENAIDY_REPO
- *  3. Spawn detached child with OPENAIDY_PORT propagated to its env
- *  4. Write PID JSON envelope to $OPENAIDY_HOME/state/server.pid
+ *  1. Resolve the listen port (--port flag > AIDY_PORT env > 3001)
+ *  2. Resolve apps/server/dist/server.js from AIDY_REPO
+ *  3. Spawn detached child with AIDY_PORT propagated to its env
+ *  4. Write PID JSON envelope to $AIDY_HOME/state/server.pid
  *  5. Poll GET http://localhost:<port>/health every 500ms (max 30s)
  *  6. Install SIGINT/SIGTERM trap that forwards to child
  *  7. Print "Server running on http://localhost:<port>"
  *  8. Unless --server-only: spawn Vite dev server for apps/web
- *     and write $OPENAIDY_HOME/state/web.pid
+ *     and write $AIDY_HOME/state/web.pid
  *
  * With --integrated: build the web bundle first, then start only the
- * server. The server reads OPENAIDY_WEB_DIST and serves the built bundle
+ * server. The server reads AIDY_WEB_DIST and serves the built bundle
  * itself (same-origin). This is the recommended production mode.
  *
  * Design per R-D2: process spawning tested on Unix/macOS only.
@@ -43,7 +43,7 @@ import {
  * Default server port. Kept in sync with DEFAULT_SERVER_PORT in
  * packages/config/src/env.ts and FALLBACK_BACKEND_PORT in
  * apps/web/vite.config.ts. Hardcoded here because Node ESM cannot
- * resolve @openaidy/config without .js extensions on its internal
+ * resolve @aidyagent/config without .js extensions on its internal
  * relative imports (see packages/cli/src/lib/config.ts for the same
  * explanation).
  */
@@ -60,13 +60,13 @@ const WEB_READY_POLL_MS = 500;
 const WEB_READY_MAX_POLLS = 30; // 15 seconds
 
 const HELP_TEXT = `
-Usage: openaidy start [options]
+Usage: aidy start [options]
 
-Start the OpenAidy server and web frontend as background processes.
+Start the Aidy server and web frontend as background processes.
 
 The server binds to a port resolved in this order:
   1. --port <N> flag (highest priority)
-  2. OPENAIDY_PORT environment variable
+  2. AIDY_PORT environment variable
   3. Default: ${DEFAULT_SERVER_PORT}
 
 The WebSocket gateway rides on the same port (same-origin architecture).
@@ -80,21 +80,21 @@ Automatically:
 Options:
   -h, --help          Show this help message
   --port <N>          Listen port (default: ${DEFAULT_SERVER_PORT};
-                      env OPENAIDY_PORT wins if set)
+                      env AIDY_PORT wins if set)
   --server-only       Start only the server, skip the web frontend
   --integrated        Build the web bundle first and have the server
                       serve it directly (same-origin). The Vite dev
                       server is NOT spawned. Requires pnpm.
   --foreground        Run the server attached to this process and exit
                       when it exits (no web frontend). This is what the
-                      systemd unit from \`openaidy service install\` runs.
+                      systemd unit from \`aidy service install\` runs.
 
-When the OpenAidy service is installed (\`openaidy service install\`),
+When the Aidy service is installed (\`aidy service install\`),
 this command starts it through systemctl instead of spawning a server.
 
 Exit Codes:
   0  Server started and healthy (and web started unless --server-only)
-  1  --port or OPENAIDY_PORT invalid, server entry missing, web build
+  1  --port or AIDY_PORT invalid, server entry missing, web build
      failed (--integrated), or health check timed out
 `;
 
@@ -105,7 +105,7 @@ Exit Codes:
 /**
  * Resolve the listen port from CLI args and env.
  *
- * Precedence: --port flag > OPENAIDY_PORT env > DEFAULT_SERVER_PORT.
+ * Precedence: --port flag > AIDY_PORT env > DEFAULT_SERVER_PORT.
  * Exported for testing.
  */
 export function resolveStartPort(
@@ -129,12 +129,12 @@ export function resolveStartPort(
     }
     return { ok: true, port: parsed };
   }
-  if (env.OPENAIDY_PORT) {
-    const parsed = Number(env.OPENAIDY_PORT);
+  if (env.AIDY_PORT) {
+    const parsed = Number(env.AIDY_PORT);
     if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
       return {
         ok: false,
-        error: `Error: OPENAIDY_PORT must be a positive integer (1-65535). Got "${env.OPENAIDY_PORT}".`,
+        error: `Error: AIDY_PORT must be a positive integer (1-65535). Got "${env.AIDY_PORT}".`,
       };
     }
     return { ok: true, port: parsed };
@@ -211,10 +211,9 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
-  // Resolve OPENAIDY_HOME — default to ~/.openaidy so a globally-installed
-  // `openaidy` (npm i -g @openaidy/app) works with no env setup.
-  const openaidyHome =
-    process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
+  // Resolve AIDY_HOME — default to ~/.aidy so a globally-installed
+  // `aidy` (npm i -g @aidyagent/app) works with no env setup.
+  const aidyHome = process.env.AIDY_HOME || resolve(homedir(), '.aidy');
 
   // Packaged-install detection: the npm build ships the bundled server next to
   // this CLI (both in <pkg>/dist). In that mode we run the bundled server with
@@ -224,10 +223,10 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   const packagedServerEntry = resolve(cliDir, 'server.mjs');
   const packaged = existsSync(packagedServerEntry);
   const pkgRoot = resolve(cliDir, '..');
-  // OPENAIDY_REPO points at the cloned repo (code root) for from-source
-  // installs. When unset, fall back to OPENAIDY_HOME so older installs keep
+  // AIDY_REPO points at the cloned repo (code root) for from-source
+  // installs. When unset, fall back to AIDY_HOME so older installs keep
   // working. Unused in packaged mode.
-  const repoRoot = process.env.OPENAIDY_REPO ?? openaidyHome;
+  const repoRoot = process.env.AIDY_REPO ?? aidyHome;
 
   let serverEntry: string;
   let runtimeArgs: string[];
@@ -278,19 +277,19 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
         exitCode: healthy ? 0 : 1,
         output: healthy
           ? `Server running on http://localhost:${port} (managed by systemd: ${SERVICE_NAME}.service)`
-          : `Error: ${SERVICE_NAME}.service started but /health did not respond within 30 seconds. Check \`openaidy service status\`.`,
+          : `Error: ${SERVICE_NAME}.service started but /health did not respond within 30 seconds. Check \`aidy service status\`.`,
       };
     }
   }
 
   // Ensure state directory and build paths
-  const stateDir = resolve(openaidyHome, 'state');
-  const logFile = resolve(openaidyHome, 'logs', 'server.log');
+  const stateDir = resolve(aidyHome, 'state');
+  const logFile = resolve(aidyHome, 'logs', 'server.log');
   const pidFilePath = resolve(stateDir, 'server.pid');
 
   // Ensure log directory exists
   await import('node:fs/promises').then((fs) =>
-    fs.mkdir(resolve(openaidyHome, 'logs'), { recursive: true }),
+    fs.mkdir(resolve(aidyHome, 'logs'), { recursive: true }),
   );
 
   // ==========================================================================
@@ -314,8 +313,8 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
       shell: process.platform === 'win32',
       env: {
         ...process.env,
-        OPENAIDY_HOME: openaidyHome,
-        OPENAIDY_REPO: repoRoot,
+        AIDY_HOME: aidyHome,
+        AIDY_REPO: repoRoot,
       },
     });
     if (buildResult.error) {
@@ -337,34 +336,34 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   }
 
   // Spawn detached child via node --import tsx (handles ESM + extensionless imports).
-  // Pass OPENAIDY_PORT through explicitly so the server's zod env schema finds it.
-  // Also pass WS_PORT = OPENAIDY_PORT so the websocket gateway's separate
+  // Pass AIDY_PORT through explicitly so the server's zod env schema finds it.
+  // Also pass WS_PORT = AIDY_PORT so the websocket gateway's separate
   // env schema (apps/server/src/websocket/types.ts wsEnvSchema) reads the
   // same value; the gateway shares the HTTP listener in this architecture.
-  // In --integrated mode, also pass OPENAIDY_WEB_DIST so the server's
+  // In --integrated mode, also pass AIDY_WEB_DIST so the server's
   // static plugin can locate the bundle we just built.
   const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
-    OPENAIDY_PORT: String(port),
+    AIDY_PORT: String(port),
     PORT: String(port),
     WS_PORT: String(port),
-    OPENAIDY_HOME: openaidyHome,
+    AIDY_HOME: aidyHome,
   };
   if (webDistPath) {
-    childEnv['OPENAIDY_WEB_DIST'] = webDistPath;
+    childEnv['AIDY_WEB_DIST'] = webDistPath;
   }
   if (packaged) {
     // Point the bundled server at the assets shipped in the package (the
     // import.meta.url-relative defaults don't apply once bundled).
     childEnv['APP_CONFIG_TEMPLATE_PATH'] = resolve(
       pkgRoot,
-      'assets/openaidy.template.json',
+      'assets/aidy.template.json',
     );
-    childEnv['OPENAIDY_SDK_PATH'] = resolve(pkgRoot, 'assets/openaidy-sdk.js');
-    childEnv['OPENAIDY_DRIZZLE_DIR'] = resolve(pkgRoot, 'assets/drizzle');
+    childEnv['AIDY_SDK_PATH'] = resolve(pkgRoot, 'assets/aidy-sdk.js');
+    childEnv['AIDY_DRIZZLE_DIR'] = resolve(pkgRoot, 'assets/drizzle');
     // Bundled pre-installed skills (browser-automation, code-review, …).
     // The server reads from BUNDLED_SKILLS_DIR on startup and seeds
-    // ~/.openaidy/skills/ from there — without this override a packaged
+    // ~/.aidy/skills/ from there — without this override a packaged
     // install's BUNDLED_SKILLS_DIR would fall back to the dev heuristic
     // (which resolves to $HOME/config/skills, a non-existent directory
     // for normal installs) and the seeder would silently no-op, leaving
@@ -448,15 +447,13 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
         '  Web:  served from ' + webDistPath,
         '',
         'Open http://localhost:' + port + ' in your browser to get started.',
-        'Use "openaidy stop" to stop the server.',
+        'Use "aidy stop" to stop the server.',
         '',
       ].join('\n'),
     };
   }
 
-  const webInfo = serverOnly
-    ? null
-    : await startWeb(repoRoot, openaidyHome, port);
+  const webInfo = serverOnly ? null : await startWeb(repoRoot, aidyHome, port);
 
   if (serverOnly) {
     return {
@@ -469,7 +466,7 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
         '  Log:  ' + logFile,
         '',
         'Open http://localhost:' + port + ' in your browser to get started.',
-        'Use "openaidy stop" to stop the server.',
+        'Use "aidy stop" to stop the server.',
         'Pass --server-only=false (or omit the flag) to also start the web frontend.',
         'Pass --integrated to have the server serve the built web bundle itself.',
         '',
@@ -508,8 +505,8 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
       '  Log:  ' + webInfo.logFile,
       '',
       'Open ' + webInfo.url + ' in your browser to get started.',
-      'Use "openaidy stop" to stop both server and web.',
-      'Use "openaidy stop --server-only" to stop only the server.',
+      'Use "aidy stop" to stop both server and web.',
+      'Use "aidy stop --server-only" to stop only the server.',
       '',
     ].join('\n'),
   };
@@ -570,7 +567,7 @@ function runForeground(
 
 /**
  * Start the Vite dev server for apps/web as a detached child process.
- * Writes the PID to $OPENAIDY_HOME/state/web.pid so `openaidy stop` can
+ * Writes the PID to $AIDY_HOME/state/web.pid so `aidy stop` can
  * terminate it. Polls the web URL until it responds 200 (max ~15s) so
  * we don't return success while Vite is still bundling.
  *
@@ -578,7 +575,7 @@ function runForeground(
  */
 async function startWeb(
   repoRoot: string,
-  openaidyHome: string,
+  aidyHome: string,
   port: number,
 ): Promise<{
   pid: number;
@@ -596,15 +593,15 @@ async function startWeb(
   }
 
   // Ensure logs dir exists (server already created it, but be safe).
-  const logsDir = resolve(openaidyHome, 'logs');
+  const logsDir = resolve(aidyHome, 'logs');
   await import('node:fs/promises').then((fs) =>
     fs.mkdir(logsDir, { recursive: true }),
   );
   const webLogFile = resolve(logsDir, 'web.log');
-  const webPidPath = resolve(openaidyHome, 'state', 'web.pid');
+  const webPidPath = resolve(aidyHome, 'state', 'web.pid');
 
   // Spawn Vite detached. Use `pnpm dev` so the dev script from
-  // apps/web/package.json runs unchanged. Propagate OPENAIDY_PORT so
+  // apps/web/package.json runs unchanged. Propagate AIDY_PORT so
   // vite.config.ts can configure the dev proxy without requiring the
   // user to set it in a .env file.
   const child = spawn('pnpm', ['dev'], {
@@ -614,9 +611,9 @@ async function startWeb(
     cwd: webDir,
     env: {
       ...process.env,
-      OPENAIDY_HOME: openaidyHome,
-      OPENAIDY_REPO: repoRoot,
-      OPENAIDY_PORT: String(port),
+      AIDY_HOME: aidyHome,
+      AIDY_REPO: repoRoot,
+      AIDY_PORT: String(port),
     },
   });
 

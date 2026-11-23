@@ -5,7 +5,7 @@ import {
   type MessageHandler,
   type HandlerContext,
 } from './message-router';
-import { createWSMessage, type WSResponse } from '@openaidy/shared-types';
+import { createWSMessage, type WSResponse } from '@aidyagent/shared-types';
 import { ConnectionManager } from './connection-manager';
 
 // Mock logger

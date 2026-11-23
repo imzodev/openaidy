@@ -29,11 +29,11 @@ import {
   createJobsRepository,
   createJobRunsRepository,
   type DatabaseAdapter,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { SchedulerService } from './service';
 import { createPulseRunnableAdapter } from './pulse-runnable-adapter';
 import type { SessionMessageService } from '../sessions/service';
-import type { SessionsStore } from '@openaidy/db';
+import type { SessionsStore } from '@aidyagent/db';
 
 const POLL_MS = 50;
 
@@ -50,8 +50,8 @@ describe(
     let sessionsStore: SessionsStore | undefined;
 
     beforeEach(async () => {
-      sqliteDir = mkdtempSync(join(tmpdir(), 'openaidy-pulse-int-'));
-      const sqlitePath = join(sqliteDir, 'openaidy.db');
+      sqliteDir = mkdtempSync(join(tmpdir(), 'aidy-pulse-int-'));
+      const sqlitePath = join(sqliteDir, 'aidy.db');
 
       dbAdapter = await createDatabaseAdapter({
         kind: 'sqlite',

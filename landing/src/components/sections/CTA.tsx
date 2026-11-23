@@ -17,7 +17,7 @@ export function CTA() {
         Clone the repo, run one command, and your AI agent platform is live.
       </p>
       <MagneticButton
-        href="https://github.com/imzodev/openaidy"
+        href="https://github.com/imzodev/aidy"
         className="btn-primary btn-large"
       >
         <Github size={18} />

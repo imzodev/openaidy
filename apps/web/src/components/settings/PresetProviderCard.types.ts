@@ -5,7 +5,7 @@
  * imported wherever they're needed.
  */
 
-import type { ProviderPreset } from '@openaidy/shared-types';
+import type { ProviderPreset } from '@aidyagent/shared-types';
 
 export type PresetProviderCardProps = {
   preset: ProviderPreset;

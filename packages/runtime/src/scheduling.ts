@@ -73,7 +73,7 @@ export interface ScheduledRunnable<TPayload = unknown> {
    * patterns:
    * - Transactional `UPDATE ... WHERE nextRunAt <= now RETURNING *`
    *   (Postgres / SQLite with row-level locking)
-   * - Single-server trust (the current OpenAidy model, since the
+   * - Single-server trust (the current Aidy model, since the
    *   server is one process per instance).
    */
   claimNextDue(): Promise<{ id: string; payload: TPayload } | null>;

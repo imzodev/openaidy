@@ -20,7 +20,7 @@ The Zod schema in [`packages/config/src/app-config.ts`](packages/config/src/app-
 - `AppDefaults` - providerId, modelId, agentId
 - `AppProviderConfig` - discriminated union by vendorFamily (openai-compatible, anthropic, gemini)
 - `AppAgentConfig` - id, name, systemPrompt, defaults, etc.
-- `OpenAidyAppConfig` - version, defaults, providers[], agents[]
+- `AidyAppConfig` - version, defaults, providers[], agents[]
 
 ---
 

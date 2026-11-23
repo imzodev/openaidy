@@ -2,7 +2,7 @@
 
 ## Overview
 
-OpenAidy will implement a WebSocket-based control plane similar to OpenClaw's Gateway. This control plane will serve as the central communication hub for all clients, enabling real-time bidirectional communication for sessions, streaming responses, device pairing, and configuration management.
+Aidy will implement a WebSocket-based control plane similar to OpenClaw's Gateway. This control plane will serve as the central communication hub for all clients, enabling real-time bidirectional communication for sessions, streaming responses, device pairing, and configuration management.
 
 ## Goals
 
@@ -1086,13 +1086,13 @@ The approval process can be handled through multiple interfaces:
 
    ```bash
    # List pending requests
-   openaidy pairing list
+   aidy pairing list
 
    # Approve a request
-   openaidy pairing approve <requestId> --scopes "sessions.read,sessions.write"
+   aidy pairing approve <requestId> --scopes "sessions.read,sessions.write"
 
    # Deny a request
-   openaidy pairing deny <requestId>
+   aidy pairing deny <requestId>
    ```
 
 3. **WebSocket Commands**

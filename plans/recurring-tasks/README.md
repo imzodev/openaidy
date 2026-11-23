@@ -1,6 +1,6 @@
 # Recurring Tasks
 
-Recurring tasks turn the OpenAidy task system (planning → subtasks → verify → done) into a cron-driven workflow. You define a task once, attach a schedule, and OpenAidy re-runs the lifecycle on every tick — re-using the existing subtasks by default (cheap) or optionally re-planning from the latest `description` (opt-in).
+Recurring tasks turn the Aidy task system (planning → subtasks → verify → done) into a cron-driven workflow. You define a task once, attach a schedule, and Aidy re-runs the lifecycle on every tick — re-using the existing subtasks by default (cheap) or optionally re-planning from the latest `description` (opt-in).
 
 Think of a recurring task as a "Kanban card that walks itself across the board" — every cycle it resets, executes its current subtasks, and produces a fresh execution you can inspect.
 
@@ -22,7 +22,7 @@ Think of a recurring task as a "Kanban card that walks itself across the board" 
 
 ### Recurring task
 
-A standard OpenAidy task (`tasks` table row) with a 1-to-1 schedule definition in a new `task_schedules` table. The schedule contains:
+A standard Aidy task (`tasks` table row) with a 1-to-1 schedule definition in a new `task_schedules` table. The schedule contains:
 
 - A **cron expression** or **preset** (e.g. `15m`, `1h`, `1d`) — the same human-friendly formats used by Pulses
 - A **next-run timestamp** — consumed by the scheduler polling loop
@@ -47,7 +47,7 @@ A new `task_schedules` table keeps both domains clean, while still sharing the *
 
 The `ScheduleInput` discriminated union lives in
 `packages/shared-types/src/pulses.ts` (re-exported from
-`@openaidy/shared-types`). The **type** is shared across the server,
+`@aidyagent/shared-types`). The **type** is shared across the server,
 web, and tool layers; the **runtime parser** (preset-to-cron
 mapping, cron validation via `croner`) lives server-side in
 `apps/server/src/scheduler/cron-utils.ts` and

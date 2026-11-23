@@ -24,7 +24,7 @@ import type {
   BootstrapAdminDecoder,
   BootstrapAdminInspectStatus,
   BootstrapAdminInspectOutcome,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 export type {
   VerifiedBootstrapAdminPayload,

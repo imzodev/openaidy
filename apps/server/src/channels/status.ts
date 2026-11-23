@@ -6,7 +6,7 @@
  */
 
 import type { IChannel } from './interface.js';
-import type { ChannelStatusResponse } from '@openaidy/shared-types';
+import type { ChannelStatusResponse } from '@aidyagent/shared-types';
 
 export function toStatusResponse(channel: IChannel): ChannelStatusResponse {
   const error = channel.getLastError?.();

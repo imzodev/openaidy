@@ -38,8 +38,8 @@ import {
   type SessionDeleteResponse,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
-import type { Session, SessionMessage, SessionRun } from '@openaidy/db';
+} from '@aidyagent/shared-types';
+import type { Session, SessionMessage, SessionRun } from '@aidyagent/db';
 
 // ============================================================================
 // Session Handler Class

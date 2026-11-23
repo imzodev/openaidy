@@ -1,7 +1,7 @@
 /**
  * Sessions List Command Handler
  *
- * Implements `openaidy sessions list` command.
+ * Implements `aidy sessions list` command.
  * Calls GET /sessions via the HTTP REST API.
  */
 
@@ -19,7 +19,7 @@ export async function sessionsListHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy sessions list [options]
+      `Usage: aidy sessions list [options]
 
 List all sessions.
 
@@ -27,8 +27,8 @@ Options:
   --limit <n>    Maximum number of sessions to show (default: 50)
 
 Examples:
-  pnpm openaidy sessions list
-  pnpm openaidy sessions list --limit 20
+  pnpm aidy sessions list
+  pnpm aidy sessions list --limit 20
 
 Exit Codes:
   0  Success

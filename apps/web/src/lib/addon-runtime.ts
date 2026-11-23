@@ -1,7 +1,7 @@
 /**
  * Addon Runtime API Implementation
  *
- * Runtime API implementation for addon components to interact with OpenAidy.
+ * Runtime API implementation for addon components to interact with Aidy.
  */
 
 import type {
@@ -409,7 +409,7 @@ export interface AddonLoaderOptions {
  * Load an addon
  */
 export async function loadAddon(
-  manifest: import('@openaidy/shared-types').AddonManifest,
+  manifest: import('@aidyagent/shared-types').AddonManifest,
   options: AddonLoaderOptions,
 ): Promise<LoadedAddon> {
   const { events } = options;

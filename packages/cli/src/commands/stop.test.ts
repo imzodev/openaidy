@@ -1,5 +1,5 @@
 /**
- * stop.test.ts — vitest suite for openaidy stop (PR2 T2.3)
+ * stop.test.ts — vitest suite for aidy stop (PR2 T2.3)
  *
  * Tests process-kill behavior in isolation using mocks.
  */
@@ -13,21 +13,21 @@ import { stopHandler } from './stop.js';
 import { writePidFile } from '../lib/process-manager.js';
 
 async function setupHome(): Promise<string> {
-  const home = join(tmpdir(), `openaidy-stop-test-${randomUUID()}`);
+  const home = join(tmpdir(), `aidy-stop-test-${randomUUID()}`);
   await mkdir(join(home, 'state'), { recursive: true });
   return home;
 }
 
-describe('openaidy stop', () => {
+describe('aidy stop', () => {
   let testHome: string;
 
   beforeEach(async () => {
     testHome = await setupHome();
-    process.env.OPENAIDY_HOME = testHome;
+    process.env.AIDY_HOME = testHome;
   });
 
   afterEach(() => {
-    delete process.env.OPENAIDY_HOME;
+    delete process.env.AIDY_HOME;
   });
 
   it('shows help with --help flag', async () => {
@@ -56,7 +56,7 @@ describe('openaidy stop', () => {
     expect(result.output).toContain('stale');
   });
 
-  // Note: OPENAIDY_HOME now defaults to ~/.openaidy when unset (so a global
-  // `openaidy stop` finds the running server), so there's no longer an
+  // Note: AIDY_HOME now defaults to ~/.aidy when unset (so a global
+  // `aidy stop` finds the running server), so there's no longer an
   // "unset → not running" special case — the no-PID-file path above covers it.
 });

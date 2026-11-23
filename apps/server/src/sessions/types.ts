@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionRun } from '@openaidy/db';
+import type { SessionMessage, SessionRun } from '@aidyagent/db';
 import type { SessionMessageRecord, SessionRunRecord } from '../types';
 
 /**
@@ -95,7 +95,7 @@ import type {
   SessionsStore,
   SessionMessagesStore,
   SessionRunsStore,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 /**
  * Session message service options
@@ -144,7 +144,7 @@ export type SessionMessageServiceOptions = {
    * Per-model pricing overrides (from app config) used for cost estimation.
    * Merged over the built-in MODEL_PRICING table.
    */
-  modelPricing?: Record<string, import('@openaidy/shared-types').ModelPricing>;
+  modelPricing?: Record<string, import('@aidyagent/shared-types').ModelPricing>;
   /**
    * Max rounds in the agentic tool-call loop before the model is forced to
    * produce a final text answer (tools withheld on the last round). Defaults

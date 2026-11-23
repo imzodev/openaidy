@@ -7,7 +7,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { MarketplaceService } from '../marketplace/service';
-import type { MarketplaceRepository } from '@openaidy/db';
+import type { MarketplaceRepository } from '@aidyagent/db';
 
 /**
  * Marketplace routes options
@@ -64,8 +64,8 @@ interface PublishAddonBody {
   iconUrl?: string;
   manifest: Record<string, unknown>;
   version: string;
-  minOpenaidyVersion?: string;
-  maxOpenaidyVersion?: string;
+  minAidyVersion?: string;
+  maxAidyVersion?: string;
 }
 
 /**

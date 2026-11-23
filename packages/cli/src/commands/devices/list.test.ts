@@ -19,7 +19,7 @@ import { createDevicesListHandler } from './list.js';
 import type {
   PairingContext,
   PairingRequestData,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 
 describe('Devices List Command', () => {
   const createRequest = (

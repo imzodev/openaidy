@@ -10,7 +10,7 @@ import type {
   SubtasksRepository,
   TaskAgentsRepository,
   DeliverablesRepository,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { AgentRegistry } from '../agents';
 import { parseModelString } from '../agents/schema';
 import { createLogger } from '../lib/logger';
@@ -25,7 +25,7 @@ import {
   buildComplexityPrompt,
   buildAgentContextPrompt,
 } from './prompts';
-import type { Task } from '@openaidy/db';
+import type { Task } from '@aidyagent/db';
 
 const logger = createLogger('PlanningService');
 
@@ -136,8 +136,8 @@ export class PlanningService {
       if (this.agents) {
         const agents = this.agents.listAllAgents();
         if (agents.length > 0) {
-          const openAidyHome = process.env.OPENAIDY_HOME || '';
-          agentContext = buildAgentContextPrompt(agents, openAidyHome);
+          const aidyHome = process.env.AIDY_HOME || '';
+          agentContext = buildAgentContextPrompt(agents, aidyHome);
         }
       }
 

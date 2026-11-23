@@ -3,12 +3,12 @@ import type {
   WorkflowRun,
   WorkflowTrigger,
   WorkflowTriggersRepository,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type {
   ChannelMessageTriggerConfig,
   WebhookTokenDto,
   WorkflowTriggerDto,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { createLogger } from '../../lib/logger';
 import type { ServiceResult } from '../../types';
 import type { WorkflowRunEvent } from '../execution/task-execution';
@@ -91,7 +91,7 @@ function cleanResult(result: string): string {
 }
 
 /**
- * Things outside OpenAidy that start a workflow run: webhooks and channel
+ * Things outside Aidy that start a workflow run: webhooks and channel
  * messages. Starts the run with what arrived as its input and, for
  * channel messages, sends the outcome back to the same chat.
  */
@@ -367,7 +367,7 @@ export class WorkflowTriggerService {
       );
       return started.error.code === 'workflow.already_running'
         ? `"${title}" is already running. Send your message again once it has finished.`
-        : `"${title}" can't run right now. Please check it in OpenAidy.`;
+        : `"${title}" can't run right now. Please check it in Aidy.`;
     }
     await this.deps.triggersRepo.markFired(trigger.id);
     this.deps.logger.info('Channel message started a workflow run', {
@@ -391,7 +391,7 @@ export class WorkflowTriggerService {
 
     const text =
       event.type === 'approval.waiting'
-        ? `"${title}" is waiting for your approval in OpenAidy: ${event.subtask.title}.`
+        ? `"${title}" is waiting for your approval in Aidy: ${event.subtask.title}.`
         : await this.finalMessage(event.run, title);
     const sent = await this.deps.sendToChannel(
       target.channelId,

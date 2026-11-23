@@ -234,7 +234,7 @@ function getHintFromDetails(
       }
       break;
     case 'BOOTSTRAP_TOKEN_MISSING':
-      return 'Run: openaidy admin token create';
+      return 'Run: aidy admin token create';
     case 'REQUEST_EXPIRED':
       if (details.expiredAt) {
         return `Request expired at: ${details.expiredAt}`;

@@ -28,7 +28,7 @@ import { globSync } from 'node:fs';
 import path from 'node:path';
 
 const RELEASE_ASSET_BASE = (tag) =>
-  `https://github.com/imzodev/openaidy/releases/download/${tag}`;
+  `https://github.com/imzodev/aidy/releases/download/${tag}`;
 
 // Maps a found artifact's path to the updater's platform key(s) — some
 // artifacts (the universal macOS build) serve two keys from one file since

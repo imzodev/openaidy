@@ -1,9 +1,9 @@
 /**
- * openaidy service — run OpenAidy under systemd so it restarts on its own.
+ * aidy service — run Aidy under systemd so it restarts on its own.
  *
- *   openaidy service install [--port <N>]   write + enable + start the unit
- *   openaidy service uninstall              stop + disable + remove it
- *   openaidy service status                 systemctl status
+ *   aidy service install [--port <N>]   write + enable + start the unit
+ *   aidy service uninstall              stop + disable + remove it
+ *   aidy service status                 systemctl status
  *
  * Linux only. See lib/service-manager.ts for the unit and scope rules.
  */
@@ -28,22 +28,22 @@ import { pollHealth, resolveStartPort } from './start.js';
 import { stopHandler } from './stop.js';
 
 const INSTALL_HELP = `
-Usage: openaidy service install [--port <N>]
+Usage: aidy service install [--port <N>]
 
-Install OpenAidy as a systemd service that starts at boot and restarts
+Install Aidy as a systemd service that starts at boot and restarts
 automatically if the server crashes (e.g. when it runs out of memory).
 
-As root this installs a system unit (/etc/systemd/system/openaidy.service);
-otherwise a user unit (~/.config/systemd/user/openaidy.service) with
+As root this installs a system unit (/etc/systemd/system/aidy.service);
+otherwise a user unit (~/.config/systemd/user/aidy.service) with
 lingering enabled so it keeps running after you log out.
 
-A server already started with \`openaidy start\` is stopped first and
-handed over to the service. Afterwards \`openaidy start|stop|restart\`
+A server already started with \`aidy start\` is stopped first and
+handed over to the service. Afterwards \`aidy start|stop|restart\`
 control the service through systemctl. Re-run to update the unit.
 
 Options:
   -h, --help          Show this help message
-  --port <N>          Listen port (default: OPENAIDY_PORT or 3001)
+  --port <N>          Listen port (default: AIDY_PORT or 3001)
 
 Exit Codes:
   0  Service installed, enabled and healthy
@@ -51,10 +51,10 @@ Exit Codes:
 `;
 
 const UNINSTALL_HELP = `
-Usage: openaidy service uninstall
+Usage: aidy service uninstall
 
-Stop and disable the OpenAidy systemd service and remove its unit file.
-Your data in OPENAIDY_HOME is not touched; run \`openaidy start\` to go
+Stop and disable the Aidy systemd service and remove its unit file.
+Your data in AIDY_HOME is not touched; run \`aidy start\` to go
 back to an unmanaged server.
 
 Exit Codes:
@@ -63,10 +63,10 @@ Exit Codes:
 `;
 
 const STATUS_HELP = `
-Usage: openaidy service status
+Usage: aidy service status
 
-Show whether the OpenAidy systemd service is installed, enabled and
-running (\`systemctl status openaidy\`).
+Show whether the Aidy systemd service is installed, enabled and
+running (\`systemctl status aidy\`).
 
 Exit Codes:
   0  Status reported (installed or not)
@@ -80,8 +80,8 @@ function notSupported(): CommandResult {
   return {
     exitCode: 1,
     output:
-      'Error: `openaidy service` needs Linux with systemd. On other systems keep ' +
-      "using `openaidy start`, or run it under your platform's service manager.",
+      'Error: `aidy service` needs Linux with systemd. On other systems keep ' +
+      "using `aidy start`, or run it under your platform's service manager.",
   };
 }
 
@@ -97,15 +97,12 @@ export async function serviceInstallHandler(
 
   const scope = defaultScope();
   const path = unitPath(scope);
-  const openaidyHome =
-    process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
+  const aidyHome = process.env.AIDY_HOME || resolve(homedir(), '.aidy');
   const lines: string[] = [];
 
   // Hand an unmanaged server over to systemd so the two never fight over the port.
   if (!detectInstalledService()) {
-    const running = await readPidFile(
-      resolve(openaidyHome, 'state/server.pid'),
-    );
+    const running = await readPidFile(resolve(aidyHome, 'state/server.pid'));
     if (running && isProcessAlive(running.pid)) {
       const stopped = await stopHandler([]);
       if (stopped.exitCode !== 0) {
@@ -129,7 +126,7 @@ export async function serviceInstallHandler(
     nodePath: process.execPath,
     nodeArgs: process.execArgv,
     cliPath,
-    openaidyHome,
+    aidyHome,
     pathEnv: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
     workingDirectory: homedir(),
     port: portFlag,
@@ -180,10 +177,10 @@ export async function serviceInstallHandler(
     output: [
       ...lines,
       healthy
-        ? `OpenAidy is running as ${SERVICE_NAME}.service on http://localhost:${portResult.port} and will restart automatically.`
+        ? `Aidy is running as ${SERVICE_NAME}.service on http://localhost:${portResult.port} and will restart automatically.`
         : `Error: ${SERVICE_NAME}.service started but /health did not respond within 30 seconds.`,
       `  Status: ${statusCmd} status ${SERVICE_NAME}`,
-      `  Logs:   ${resolve(openaidyHome, 'logs', 'server.log')}`,
+      `  Logs:   ${resolve(aidyHome, 'logs', 'server.log')}`,
     ].join('\n'),
   };
 }
@@ -194,7 +191,7 @@ export async function serviceUninstallHandler(
   if (wantsHelp(args)) return { exitCode: 0, output: UNINSTALL_HELP.trim() };
   const service = detectInstalledService();
   if (!service) {
-    return { exitCode: 0, output: 'The OpenAidy service is not installed.' };
+    return { exitCode: 0, output: 'The Aidy service is not installed.' };
   }
   const disabled = await systemctl(service.scope, [
     'disable',
@@ -211,7 +208,7 @@ export async function serviceUninstallHandler(
   await systemctl(service.scope, ['daemon-reload']);
   return {
     exitCode: 0,
-    output: `Removed ${service.unitPath}. The server is stopped; run \`openaidy start\` to start it unmanaged.`,
+    output: `Removed ${service.unitPath}. The server is stopped; run \`aidy start\` to start it unmanaged.`,
   };
 }
 
@@ -224,8 +221,8 @@ export async function serviceStatusHandler(
     return {
       exitCode: 0,
       output: systemdAvailable()
-        ? 'The OpenAidy service is not installed. Run `openaidy service install` to have systemd keep the server running.'
-        : 'The OpenAidy service is not available on this system (needs Linux with systemd).',
+        ? 'The Aidy service is not installed. Run `aidy service install` to have systemd keep the server running.'
+        : 'The Aidy service is not available on this system (needs Linux with systemd).',
     };
   }
   const status = await systemctl(service.scope, [

@@ -1,13 +1,13 @@
-; openaidy.nsi — NSIS installer snippet for Windows service registration
+; aidy.nsi — NSIS installer snippet for Windows service registration
 ; This file is included by the main installer .nsi script
 
-; Register OpenAidy as a scheduled task that runs at logon
+; Register Aidy as a scheduled task that runs at logon
 !macro CUSTOM_INSTALL
   ; Create the scheduled task using schtasks
-  NSExec::ExecToLog 'schtasks /Create /TN "OpenAidy" /TR "$INSTDIR\openaidy-service.bat" /SC ONLOGON /F'
+  NSExec::ExecToLog 'schtasks /Create /TN "Aidy" /TR "$INSTDIR\aidy-service.bat" /SC ONLOGON /F'
 !macroend
 
 !macro CUSTOM_UNINSTALL
   ; Remove the scheduled task
-  NSExec::ExecToLog 'schtasks /Delete /TN "OpenAidy" /F'
+  NSExec::ExecToLog 'schtasks /Delete /TN "Aidy" /F'
 !macroend

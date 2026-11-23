@@ -10,7 +10,7 @@ import {
   formatSubtaskDetail,
   formatSubtaskList,
 } from './subtasks.js';
-import type { SubtaskStatus } from '@openaidy/shared-types';
+import type { SubtaskStatus } from '@aidyagent/shared-types';
 
 describe('formatSubtaskStatus', () => {
   it('returns human-readable labels', () => {
@@ -41,10 +41,15 @@ describe('formatFullDate', () => {
 describe('formatSubtaskLine', () => {
   it('formats with status badge and title', () => {
     const line = formatSubtaskLine({
-      id: 'st1', taskId: 't1', title: 'Write tests',
+      id: 'st1',
+      taskId: 't1',
+      title: 'Write tests',
       status: 'in_progress' as SubtaskStatus,
-      assignedAgentId: null, result: null, retryCount: 0,
-      createdAt: '', updatedAt: '',
+      assignedAgentId: null,
+      result: null,
+      retryCount: 0,
+      createdAt: '',
+      updatedAt: '',
     });
     expect(line).toContain('[In Progress]');
     expect(line).toContain('Write tests');
@@ -54,11 +59,16 @@ describe('formatSubtaskLine', () => {
 describe('formatSubtaskDetail', () => {
   it('renders all fields', () => {
     const result = formatSubtaskDetail({
-      id: 'st1', taskId: 't1', title: 'Implement feature',
+      id: 'st1',
+      taskId: 't1',
+      title: 'Implement feature',
       description: 'Build the thing',
       status: 'completed' as SubtaskStatus,
-      assignedAgentId: 'agent-1', result: 'All done!',
-      retryCount: 1, createdAt: '2026-01-01T10:00:00Z', updatedAt: '2026-01-02T10:00:00Z',
+      assignedAgentId: 'agent-1',
+      result: 'All done!',
+      retryCount: 1,
+      createdAt: '2026-01-01T10:00:00Z',
+      updatedAt: '2026-01-02T10:00:00Z',
     });
     expect(result).toContain('st1');
     expect(result).toContain('agent-1');
@@ -69,10 +79,16 @@ describe('formatSubtaskDetail', () => {
   it('truncates long results at 80 chars', () => {
     const longResult = 'A'.repeat(120);
     const result = formatSubtaskDetail({
-      id: 'st1', taskId: 't1', title: 'Test', description: 'Desc',
+      id: 'st1',
+      taskId: 't1',
+      title: 'Test',
+      description: 'Desc',
       status: 'completed' as SubtaskStatus,
-      assignedAgentId: null, result: longResult,
-      retryCount: 0, createdAt: '', updatedAt: '',
+      assignedAgentId: null,
+      result: longResult,
+      retryCount: 0,
+      createdAt: '',
+      updatedAt: '',
     });
     expect(result).toContain('…');
     expect(result).not.toContain('AAAA'.repeat(30));
@@ -85,12 +101,19 @@ describe('formatSubtaskList', () => {
   });
 
   it('renders all subtask fields', () => {
-    const subtasks = [{
-      id: 'st1', taskId: 't1', title: 'Step 1',
-      status: 'pending' as SubtaskStatus,
-      assignedAgentId: null, result: null, retryCount: 0,
-      createdAt: '2026-01-01T10:00:00Z', updatedAt: '2026-01-01T10:00:00Z',
-    }];
+    const subtasks = [
+      {
+        id: 'st1',
+        taskId: 't1',
+        title: 'Step 1',
+        status: 'pending' as SubtaskStatus,
+        assignedAgentId: null,
+        result: null,
+        retryCount: 0,
+        createdAt: '2026-01-01T10:00:00Z',
+        updatedAt: '2026-01-01T10:00:00Z',
+      },
+    ];
     const result = formatSubtaskList(subtasks);
     expect(result).toContain('[Pending]');
     expect(result).toContain('Step 1');
@@ -100,8 +123,28 @@ describe('formatSubtaskList', () => {
 
   it('renders multiple subtasks', () => {
     const subtasks = [
-      { id: 'st1', taskId: 't1', title: 'First', status: 'completed' as SubtaskStatus, assignedAgentId: 'a1', result: 'Done', retryCount: 0, createdAt: '', updatedAt: '' },
-      { id: 'st2', taskId: 't1', title: 'Second', status: 'failed' as SubtaskStatus, assignedAgentId: null, result: null, retryCount: 2, createdAt: '', updatedAt: '' },
+      {
+        id: 'st1',
+        taskId: 't1',
+        title: 'First',
+        status: 'completed' as SubtaskStatus,
+        assignedAgentId: 'a1',
+        result: 'Done',
+        retryCount: 0,
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'st2',
+        taskId: 't1',
+        title: 'Second',
+        status: 'failed' as SubtaskStatus,
+        assignedAgentId: null,
+        result: null,
+        retryCount: 2,
+        createdAt: '',
+        updatedAt: '',
+      },
     ];
     const result = formatSubtaskList(subtasks);
     expect(result).toContain('[Completed]');

@@ -1,9 +1,9 @@
-import type { ScheduledJob } from '@openaidy/db';
+import type { ScheduledJob } from '@aidyagent/db';
 import type {
   ScheduleInput,
   ParsedSchedule,
   PulseRecord,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import {
   validateCronExpression,
   calculateNextRun,

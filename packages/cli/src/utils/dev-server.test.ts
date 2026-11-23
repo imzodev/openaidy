@@ -72,9 +72,9 @@ describe('Dev Server Utils', () => {
     });
 
     it('should reject invalid URL', () => {
-      const result = validateServerConfig({ openaidyUrl: 'not-a-url' });
+      const result = validateServerConfig({ aidyUrl: 'not-a-url' });
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Invalid OpenAidy URL format');
+      expect(result.errors).toContain('Invalid Aidy URL format');
     });
   });
 

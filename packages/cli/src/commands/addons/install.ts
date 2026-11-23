@@ -1,5 +1,5 @@
 /**
- * Install Command - Register an addon with a local OpenAidy server
+ * Install Command - Register an addon with a local Aidy server
  */
 
 import * as p from '@clack/prompts';
@@ -11,7 +11,7 @@ import type {
   InstallOptions,
   InstallResult,
 } from '../../types.js';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 async function readAdminToken(tokenPath: string): Promise<string | null> {
   try {
@@ -24,11 +24,11 @@ async function readAdminToken(tokenPath: string): Promise<string | null> {
 }
 
 /**
- * Install (register) a built addon with the local OpenAidy server.
+ * Install (register) a built addon with the local Aidy server.
  *
  * Reads addon.json from the project directory and POSTs the manifest to
  * POST /api/addons. Authenticates using the bootstrap-admin token from
- * .openaidy/credentials/bootstrap-admin.json (same as other CLI commands).
+ * .aidy/credentials/bootstrap-admin.json (same as other CLI commands).
  */
 export async function installAddon(
   projectPath: string = process.cwd(),
@@ -65,7 +65,7 @@ export async function installAddon(
     const msg = err instanceof Error ? err.message : String(err);
     return {
       success: false,
-      message: `Could not reach server at ${serverUrl}: ${msg}\n  Set OPENAIDY_SERVER_URL if your server runs on a different port.`,
+      message: `Could not reach server at ${serverUrl}: ${msg}\n  Set AIDY_SERVER_URL if your server runs on a different port.`,
     };
   }
 
@@ -132,12 +132,10 @@ export async function addonInstallHandler(
   if (!addon) {
     const all = listAddonProjects();
     if (all.length === 0) {
-      p.log.error('No addons found in .openaidy/addons/');
-      return { exitCode: 1, error: 'No addons found in .openaidy/addons/' };
+      p.log.error('No addons found in .aidy/addons/');
+      return { exitCode: 1, error: 'No addons found in .aidy/addons/' };
     }
-    const names = all
-      .map((a) => `  openaidy addon install ${a.name}`)
-      .join('\n');
+    const names = all.map((a) => `  aidy addon install ${a.name}`).join('\n');
     p.log.error(`Multiple addons found. Specify one:\n${names}`);
     return {
       exitCode: 1,

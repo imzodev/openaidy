@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 import {
   buildDeferredToolsBlock,
   formatToolSearchResult,

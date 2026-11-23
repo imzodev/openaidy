@@ -1,15 +1,15 @@
 ---
 summary: 'Architecture and implementation plan for the multi-provider LLM adapter system'
 read_when:
-  - You are designing the provider layer for OpenAidy
+  - You are designing the provider layer for Aidy
   - You want a vendor-neutral runtime for OpenAI-compatible, Anthropic, and Gemini
   - You need implementation guidance that follows SOLID and clean architecture
-title: 'OpenAidy Provider Adapter Plan'
+title: 'Aidy Provider Adapter Plan'
 ---
 
-# OpenAidy Provider Adapter Plan
+# Aidy Provider Adapter Plan
 
-This document defines the recommended architecture and implementation plan for OpenAidy's multi-provider LLM integration system.
+This document defines the recommended architecture and implementation plan for Aidy's multi-provider LLM integration system.
 
 The goal is to support:
 
@@ -59,7 +59,7 @@ Recommended initial adapters:
 
 Reasons:
 
-- OpenAidy needs a true multi-provider architecture.
+- Aidy needs a true multi-provider architecture.
 - Anthropic and Gemini have different request, response, and streaming models.
 - The core needs stable internal contracts independent of one vendor framework.
 - Dispatch, sessions, and plugins should depend on internal abstractions, not on one framework's runtime model.
@@ -596,7 +596,7 @@ Implement in this order:
 
 ## Expected outcome
 
-After this plan is implemented, OpenAidy should have:
+After this plan is implemented, Aidy should have:
 
 - a stable internal provider abstraction
 - clean support for multiple vendor families

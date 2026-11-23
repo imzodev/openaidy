@@ -1,7 +1,7 @@
 ---
 summary: 'The proactive assistant: who you are and how to reach you, the daily briefing, alerts that only speak up when needed, and reminders agents schedule from any conversation'
 read_when:
-  - You want OpenAidy to message you (WhatsApp) without being asked first
+  - You want Aidy to message you (WhatsApp) without being asked first
   - You want a morning briefing, or to be told when something needs you
   - You want agents to remind you or follow up later in a conversation
 title: 'Assistant'
@@ -9,7 +9,7 @@ title: 'Assistant'
 
 # Assistant
 
-OpenAidy can reach out to you, not just answer. Tell it once who you are and where to reach you, and it can brief you every morning, tell you when something needs you, and agents can come back to a conversation later on their own ("I'll check tomorrow whether they paid").
+Aidy can reach out to you, not just answer. Tell it once who you are and where to reach you, and it can brief you every morning, tell you when something needs you, and agents can come back to a conversation later on their own ("I'll check tomorrow whether they paid").
 
 ## You (Settings → Assistant)
 
@@ -20,7 +20,7 @@ OpenAidy can reach out to you, not just answer. Tell it once who you are and whe
 
 ## Daily briefing
 
-Turn it on, pick a time, say what to cover ("today's calendar, unpaid invoices, important unread email") and which agent writes it. Every morning that agent looks things up with its integrations and sends you a short summary. OpenAidy adds what it knows itself: approvals waiting on you, workflows that failed in the last 24 hours, and today's reminders. **Send it now** sends one immediately (save your changes first).
+Turn it on, pick a time, say what to cover ("today's calendar, unpaid invoices, important unread email") and which agent writes it. Every morning that agent looks things up with its integrations and sends you a short summary. Aidy adds what it knows itself: approvals waiting on you, workflows that failed in the last 24 hours, and today's reminders. **Send it now** sends one immediately (save your changes first).
 
 ## Alerts: "tell me when…"
 

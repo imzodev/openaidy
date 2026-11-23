@@ -9,8 +9,8 @@ import {
 } from './mmx-bridge.js';
 import { createLogger } from '../../lib/logger.js';
 import type { OAuthStateStore } from './state-store.js';
-import type { DatabaseClient } from '@openaidy/db';
-import type { CredentialInvalidator } from '@openaidy/shared-types';
+import type { DatabaseClient } from '@aidyagent/db';
+import type { CredentialInvalidator } from '@aidyagent/shared-types';
 
 const log = createLogger('MiniMaxOAuth');
 /**
@@ -20,7 +20,7 @@ const log = createLogger('MiniMaxOAuth');
  * `/oauth2/token`) require a special `client_id` that is only embedded
  * inside the official `mmx-cli` binary. They are NOT publicly accessible
  * to third parties (verified by curl: 404). So we cannot implement the
- * device-code flow directly from OpenAidy — we have to delegate to
+ * device-code flow directly from Aidy — we have to delegate to
  * `mmx`, which has the privileged client_id.
  *
  * The user-facing experience is the same as a normal OAuth flow:
@@ -93,7 +93,7 @@ export async function startMiniMaxOAuth(
       ok: false,
       error: 'mmx_not_installed',
       message:
-        'The mmx-cli tool could not be found. OpenAidy bundles it as a ' +
+        'The mmx-cli tool could not be found. Aidy bundles it as a ' +
         'server dependency, so this usually means dependencies are not ' +
         'installed — run: pnpm install',
     };
@@ -208,7 +208,7 @@ export async function getMiniMaxOAuthStatus(
   const tokens = readMmxTokens();
   if (tokens) {
     const verificationUrl = flow.codeChallenge
-      ? `https://platform.minimax.io/oauth-authorize?user_code=${flow.codeChallenge}&client=OpenAidy`
+      ? `https://platform.minimax.io/oauth-authorize?user_code=${flow.codeChallenge}&client=Aidy`
       : undefined;
     return {
       ok: true,
@@ -222,7 +222,7 @@ export async function getMiniMaxOAuthStatus(
     ok: true,
     status: 'pending' as const,
     verificationUrl: flow.codeChallenge
-      ? `https://platform.minimax.io/oauth-authorize?user_code=${flow.codeChallenge}&client=OpenAidy`
+      ? `https://platform.minimax.io/oauth-authorize?user_code=${flow.codeChallenge}&client=Aidy`
       : undefined,
     userCode: flow.codeChallenge || undefined,
   } as Extract<GetMiniMaxOAuthStatusResult, { ok: true }>;
@@ -244,7 +244,7 @@ async function wireMmxHandleToFlow(
         // frontend could also be added. For now: auto-persist on success.
         try {
           const { ProviderCredentialsRepository } =
-            await import('@openaidy/db');
+            await import('@aidyagent/db');
           const { getEncryptionService } =
             await import('../../lib/encryption.js');
           const credentialsRepo = new ProviderCredentialsRepository(

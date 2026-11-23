@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ModelRequest } from '@openaidy/runtime';
+import type { ModelRequest } from '@aidyagent/runtime';
 import { mapRequest } from './request-mapper';
 import { mergeLeadingSystemMessages } from '../openai-compatible/request-mapper';
 

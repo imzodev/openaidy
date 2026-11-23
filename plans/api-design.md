@@ -1,14 +1,14 @@
 ---
-summary: 'Suggested API design for OpenAidy core services'
+summary: 'Suggested API design for Aidy core services'
 read_when:
-  - You are designing OpenAidy server routes and real-time contracts
+  - You are designing Aidy server routes and real-time contracts
   - You need a starting point for sessions, cron, channels, pairing, instances, and MCP APIs
-title: 'OpenAidy API Design'
+title: 'Aidy API Design'
 ---
 
-# OpenAidy API Design
+# Aidy API Design
 
-This document proposes the initial API surface for OpenAidy.
+This document proposes the initial API surface for Aidy.
 
 ## Transport choices
 
@@ -23,7 +23,7 @@ Recommended transport split:
 The WebSocket gateway provides real-time, bidirectional communication. Connect to `/ws` with a valid JWT token:
 
 ```
-wss://api.openaidy.com/ws?token=<jwt-token>
+wss://api.aidyagent.app/ws?token=<jwt-token>
 ```
 
 ### Connection Lifecycle
@@ -235,7 +235,7 @@ All mutation APIs should perform role and capability checks.
 
 ### MCP server exposure
 
-OpenAidy can also expose selected platform operations as MCP tools, such as:
+Aidy can also expose selected platform operations as MCP tools, such as:
 
 - list sessions
 - read session transcript

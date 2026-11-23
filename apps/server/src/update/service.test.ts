@@ -147,7 +147,7 @@ describe('UpdateService.startUpdate', () => {
 
     await flush();
 
-    expect(install).toHaveBeenCalledWith('@openaidy/app', '0.4.0');
+    expect(install).toHaveBeenCalledWith('@aidyagent/app', '0.4.0');
     expect(restart).toHaveBeenCalledOnce();
     expect(svc.getState().status).toBe('restarting');
     expect(svc.getState().newVersion).toBe('0.4.0');
@@ -175,7 +175,7 @@ describe('UpdateService.startUpdate', () => {
   it('reports an error when the restart hand-off throws', async () => {
     const install = vi.fn().mockResolvedValue(undefined);
     const restart = vi.fn().mockImplementation(() => {
-      throw new Error('spawn openaidy ENOENT');
+      throw new Error('spawn aidy ENOENT');
     });
     const svc = createUpdateService({
       currentVersion: '0.3.8',
@@ -215,10 +215,10 @@ describe('UpdateService.startUpdate', () => {
 });
 
 describe('detectSelfUpdatable', () => {
-  it('is false for the monorepo (dev) — name is not @openaidy/app', () => {
+  it('is false for the monorepo (dev) — name is not @aidyagent/app', () => {
     // Walking up from this test file lands on the repo-root package.json,
-    // whose name is "openaidy", not the published "@openaidy/app".
-    expect(detectSelfUpdatable('@openaidy/app')).toBe(false);
+    // whose name is "aidy", not the published "@aidyagent/app".
+    expect(detectSelfUpdatable('@aidyagent/app')).toBe(false);
   });
 });
 
@@ -231,12 +231,12 @@ describe('defaultInstall / defaultRestart (real spawn wiring)', () => {
     const child = fakeChild();
     spawnMock.mockReturnValue(child);
 
-    const install = defaultInstall('@openaidy/app', '1.2.3');
+    const install = defaultInstall('@aidyagent/app', '1.2.3');
     const [cmd, args, opts] = spawnMock.mock.calls[0]!;
     expect(cmd).toBe('npm');
     // The version reaches spawn as one argv element — no shell string is built
     // out of it, so it can't be split into extra shell tokens even if malformed.
-    expect(args).toEqual(['install', '-g', '@openaidy/app@1.2.3']);
+    expect(args).toEqual(['install', '-g', '@aidyagent/app@1.2.3']);
     expect((opts as { shell?: boolean }).shell).toBe(false);
 
     child.emit('exit', 0);
@@ -247,7 +247,7 @@ describe('defaultInstall / defaultRestart (real spawn wiring)', () => {
     const child = fakeChild();
     spawnMock.mockReturnValue(child);
 
-    const install = defaultInstall('@openaidy/app', '1.2.3');
+    const install = defaultInstall('@aidyagent/app', '1.2.3');
     child.emit('error', new Error('ENOENT'));
     await expect(install).rejects.toThrow('ENOENT');
   });

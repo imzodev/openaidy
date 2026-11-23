@@ -37,7 +37,7 @@ Update `apps/desktop/src-tauri/tauri.conf.json` — replace the `app.windows` se
     "windows": [
       {
         "label": "main",
-        "title": "OpenAidy",
+        "title": "Aidy",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
@@ -89,15 +89,15 @@ pub struct WindowState {
 }
 
 impl WindowState {
-    pub fn load(openaidy_home: &PathBuf) -> Option<WindowState> {
-        let path = openaidy_home.join("window-state.json");
+    pub fn load(aidy_home: &PathBuf) -> Option<WindowState> {
+        let path = aidy_home.join("window-state.json");
         let content = fs::read_to_string(path).ok()?;
         serde_json::from_str(&content).ok()
     }
 
-    pub fn save(&self, openaidy_home: &PathBuf) -> std::io::Result<()> {
-        fs::create_dir_all(openaidy_home)?;
-        let path = openaidy_home.join("window-state.json");
+    pub fn save(&self, aidy_home: &PathBuf) -> std::io::Result<()> {
+        fs::create_dir_all(aidy_home)?;
+        let path = aidy_home.join("window-state.json");
         let content = serde_json::to_string_pretty(self)?;
         fs::write(path, content)
     }
@@ -108,10 +108,10 @@ Update `setup_close_to_tray` in `window.rs` to also save state on close:
 
 ```rust
 use std::sync::OnceLock;
-static OPENAIDY_HOME: OnceLock<PathBuf> = OnceLock::new();
+static AIDY_HOME: OnceLock<PathBuf> = OnceLock::new();
 
-pub fn set_openaidy_home(home: PathBuf) {
-    OPENAIDY_HOME.set(home).ok();
+pub fn set_aidy_home(home: PathBuf) {
+    AIDY_HOME.set(home).ok();
 }
 
 pub fn setup_close_to_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
@@ -123,7 +123,7 @@ pub fn setup_close_to_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn
         event.prevent();
 
         // Save window state before hiding
-        if let Some(home) = OPENAIDY_HOME.get() {
+        if let Some(home) = AIDY_HOME.get() {
             if let Ok(pos) = main_window.outer_position() {
                 if let Ok(size) = main_window.outer_size() {
                     let is_max = main_window.is_maximized().unwrap_or(false);
@@ -154,7 +154,7 @@ In `main.rs`, before `tauri::Builder::default()`, restore window state:
 
 ```rust
 // Load saved window state
-let window_state = WindowState::load(&openaidy_home);
+let window_state = WindowState::load(&aidy_home);
 
 // Apply to main window after setup
 // (done in setup() callback)
@@ -168,7 +168,7 @@ And in `setup()`:
     setup_close_to_tray(app.handle())?;
 
     // Restore window state if saved
-    if let Some(state) = WindowState::load(&openaidy_home) {
+    if let Some(state) = WindowState::load(&aidy_home) {
         if let Some(window) = app.get_webview_window("main") {
             if !state.is_maximized {
                 let _ = window.set_position(tauri::Position::Physical(
@@ -183,8 +183,8 @@ And in `setup()`:
         }
     }
 
-    // Set the openaidy_home for window state saving
-    set_openaidy_home(openaidy_home.clone());
+    // Set the aidy_home for window state saving
+    set_aidy_home(aidy_home.clone());
 
     Ok(())
 })

@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
-import { COMPACTION_SUMMARY_KIND } from '@openaidy/shared-types';
+import { COMPACTION_SUMMARY_KIND } from '@aidyagent/shared-types';
 import type { SessionMessage } from '../lib/api';
 import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';

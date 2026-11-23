@@ -24,7 +24,7 @@
  * requests to `/messages` with the Anthropic request format.
  *
  * Model list is read from the hidden `OPENCODE_GO_ANTHROPIC_PRESET`
- * (defined alongside `PROVIDER_PRESETS` in `@openaidy/shared-types`).
+ * (defined alongside `PROVIDER_PRESETS` in `@aidyagent/shared-types`).
  * It is deliberately excluded from the visible `PROVIDER_PRESETS`
  * array so the UI doesn't render two separate "OpenCode Go" cards.
  */
@@ -32,7 +32,7 @@
 import {
   OPENCODE_GO_ANTHROPIC_PRESET,
   type AuthMethod,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 
 export class OpenCodeGoAnthropicProfile extends ProviderProfile {

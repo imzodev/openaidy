@@ -1,5 +1,5 @@
 /**
- * start.test.ts — vitest suite for openaidy start (PR2 T2.2)
+ * start.test.ts — vitest suite for aidy start (PR2 T2.2)
  *
  * Most tests are skipped on Windows per design R-D2 (Unix process management).
  * The environment-variable and port-probing tests run everywhere.
@@ -14,24 +14,24 @@ import { resolveStartPort, startHandler } from './start.js';
 
 // Helper to create a home dir with a stub server entry
 async function setupHome(): Promise<string> {
-  const home = join(tmpdir(), `openaidy-start-test-${randomUUID()}`);
+  const home = join(tmpdir(), `aidy-start-test-${randomUUID()}`);
   const distDir = join(home, 'apps/server/dist');
   await mkdir(distDir, { recursive: true });
   await writeFile(join(distDir, 'server.js'), 'console.log("stub server")');
   return home;
 }
 
-describe('openaidy start', () => {
+describe('aidy start', () => {
   let testHome: string;
 
   beforeEach(async () => {
     testHome = await setupHome();
-    process.env.OPENAIDY_HOME = testHome;
+    process.env.AIDY_HOME = testHome;
   });
 
   afterEach(() => {
-    delete process.env.OPENAIDY_HOME;
-    delete process.env.OPENAIDY_PORT;
+    delete process.env.AIDY_HOME;
+    delete process.env.AIDY_PORT;
   });
 
   it('shows help with --help flag', async () => {
@@ -40,34 +40,34 @@ describe('openaidy start', () => {
     expect(result.output).toContain('Usage:');
   });
 
-  it('defaults OPENAIDY_HOME when unset (no longer requires it)', async () => {
-    // A globally-installed `openaidy` has no OPENAIDY_HOME; it should default to
-    // ~/.openaidy and proceed. With OPENAIDY_REPO pointed at an empty dir (so
-    // the test doesn't depend on ~/.openaidy contents), it gets past home
+  it('defaults AIDY_HOME when unset (no longer requires it)', async () => {
+    // A globally-installed `aidy` has no AIDY_HOME; it should default to
+    // ~/.aidy and proceed. With AIDY_REPO pointed at an empty dir (so
+    // the test doesn't depend on ~/.aidy contents), it gets past home
     // resolution and fails later on the missing server entry.
-    delete process.env.OPENAIDY_HOME;
-    const noServer = join(tmpdir(), `openaidy-start-nohome-${randomUUID()}`);
+    delete process.env.AIDY_HOME;
+    const noServer = join(tmpdir(), `aidy-start-nohome-${randomUUID()}`);
     await mkdir(noServer, { recursive: true });
-    process.env.OPENAIDY_REPO = noServer;
+    process.env.AIDY_REPO = noServer;
     const result = await startHandler([]);
-    delete process.env.OPENAIDY_REPO;
+    delete process.env.AIDY_REPO;
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('not found');
   });
 
   it('exits 1 when server entry is missing', async () => {
-    const emptyHome = join(tmpdir(), `openaidy-start-missing-${randomUUID()}`);
+    const emptyHome = join(tmpdir(), `aidy-start-missing-${randomUUID()}`);
     await mkdir(emptyHome, { recursive: true });
-    process.env.OPENAIDY_HOME = emptyHome;
-    delete process.env.OPENAIDY_REPO;
+    process.env.AIDY_HOME = emptyHome;
+    delete process.env.AIDY_REPO;
 
     const result = await startHandler([]);
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('not found');
   });
 
-  it('uses OPENAIDY_REPO for entry when set', async () => {
-    const repoHome = join(tmpdir(), `openaidy-start-repo-${randomUUID()}`);
+  it('uses AIDY_REPO for entry when set', async () => {
+    const repoHome = join(tmpdir(), `aidy-start-repo-${randomUUID()}`);
     const srcDir = join(repoHome, 'apps/server/src');
     await mkdir(srcDir, { recursive: true });
 
@@ -86,23 +86,23 @@ describe('openaidy start', () => {
     ].join('\n');
     await writeFile(join(srcDir, 'server.ts'), stubSource);
 
-    const dataHome = join(tmpdir(), `openaidy-start-data-${randomUUID()}`);
+    const dataHome = join(tmpdir(), `aidy-start-data-${randomUUID()}`);
     await mkdir(dataHome, { recursive: true });
 
-    process.env.OPENAIDY_REPO = repoHome;
-    process.env.OPENAIDY_HOME = dataHome;
+    process.env.AIDY_REPO = repoHome;
+    process.env.AIDY_HOME = dataHome;
 
     try {
       const result = await startHandler(['--server-only']);
-      // Before fix: entry is resolved from OPENAIDY_HOME (dataHome) which has
+      // Before fix: entry is resolved from AIDY_HOME (dataHome) which has
       // no server.ts → "Server entry not found at <dataHome>/...".
-      // After fix: entry is resolved from OPENAIDY_REPO (repoHome) which has
+      // After fix: entry is resolved from AIDY_REPO (repoHome) which has
       // the stub → spawn succeeds, /health returns 200, exitCode 0.
       // --server-only skips web spawn (this test stub has no apps/web).
       expect(result.output).not.toContain('Server entry not found');
       expect(result.exitCode).toBe(0);
     } finally {
-      delete process.env.OPENAIDY_REPO;
+      delete process.env.AIDY_REPO;
     }
   }, 60_000);
 
@@ -110,7 +110,7 @@ describe('openaidy start', () => {
     const itIfUnix = process.platform === 'win32' ? it.skip : it;
 
     async function stubRepo(body: string[]): Promise<string> {
-      const repoHome = join(tmpdir(), `openaidy-start-fg-${randomUUID()}`);
+      const repoHome = join(tmpdir(), `aidy-start-fg-${randomUUID()}`);
       const srcDir = join(repoHome, 'apps/server/src');
       await mkdir(srcDir, { recursive: true });
       await writeFile(join(srcDir, 'server.ts'), body.join('\n'));
@@ -118,13 +118,13 @@ describe('openaidy start', () => {
     }
 
     afterEach(() => {
-      delete process.env.OPENAIDY_REPO;
+      delete process.env.AIDY_REPO;
     });
 
     itIfUnix(
       "stays attached and exits with the server's exit code",
       async () => {
-        process.env.OPENAIDY_REPO = await stubRepo(['process.exit(3);']);
+        process.env.AIDY_REPO = await stubRepo(['process.exit(3);']);
         const { probeFreePort } = await import('../lib/process-manager.js');
         const port = await probeFreePort(32000, 50);
         const result = await startHandler([
@@ -142,7 +142,7 @@ describe('openaidy start', () => {
     itIfUnix(
       'forwards SIGTERM to the server and exits cleanly',
       async () => {
-        process.env.OPENAIDY_REPO = await stubRepo([
+        process.env.AIDY_REPO = await stubRepo([
           "import { createServer } from 'node:http';",
           'const server = createServer((req, res) => { res.writeHead(200); res.end(); });',
           "server.listen(Number(process.env.PORT), '127.0.0.1');",
@@ -198,13 +198,13 @@ describe('resolveStartPort()', () => {
 
   it('--port flag wins over env', () => {
     const result = resolveStartPort(['--port', '8080'], {
-      OPENAIDY_PORT: '4000',
+      AIDY_PORT: '4000',
     });
     expect(result).toEqual({ ok: true, port: 8080 });
   });
 
-  it('falls back to OPENAIDY_PORT when --port is absent', () => {
-    const result = resolveStartPort([], { OPENAIDY_PORT: '4000' });
+  it('falls back to AIDY_PORT when --port is absent', () => {
+    const result = resolveStartPort([], { AIDY_PORT: '4000' });
     expect(result).toEqual({ ok: true, port: 4000 });
   });
 
@@ -225,9 +225,9 @@ describe('resolveStartPort()', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('rejects invalid OPENAIDY_PORT', () => {
-    const result = resolveStartPort([], { OPENAIDY_PORT: 'not-a-number' });
+  it('rejects invalid AIDY_PORT', () => {
+    const result = resolveStartPort([], { AIDY_PORT: 'not-a-number' });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain('OPENAIDY_PORT');
+    if (!result.ok) expect(result.error).toContain('AIDY_PORT');
   });
 });

@@ -13,7 +13,7 @@ import type {
   OAuthCompleteResult,
   DeviceCodeResponse,
   ConnectedProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Provider SDK client

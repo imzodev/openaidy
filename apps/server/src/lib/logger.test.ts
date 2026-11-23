@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { LogEntry } from '@openaidy/shared-types';
+import type { LogEntry } from '@aidyagent/shared-types';
 import {
   LogBuffer,
   getLogBuffer,

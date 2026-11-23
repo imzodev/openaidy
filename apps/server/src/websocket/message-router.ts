@@ -14,7 +14,7 @@ import {
   WS_ERROR_CODES,
   isWSMessage,
   createErrorResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { ConnectionManager } from './connection-manager';
 
 // ============================================================================
@@ -125,7 +125,9 @@ export class MessageRouter {
     const handler = this.handlers.get(message.type);
 
     if (!handler) {
-      this.logger.warn(`No handler registered for message type: ${message.type}`);
+      this.logger.warn(
+        `No handler registered for message type: ${message.type}`,
+      );
       return createErrorResponse(
         message.id,
         WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE,
@@ -171,10 +173,7 @@ export class MessageRouter {
   /**
    * Track a pending request
    */
-  trackRequest(
-    requestId: string,
-    connectionId: string,
-  ): Promise<unknown> {
+  trackRequest(requestId: string, connectionId: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);

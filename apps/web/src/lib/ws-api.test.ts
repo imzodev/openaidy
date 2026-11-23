@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WebSocketClient } from '@openaidy/sdk';
+import type { WebSocketClient } from '@aidyagent/sdk';
 import {
   listSessions,
   setWebSocketApiClient,

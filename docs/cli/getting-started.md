@@ -1,12 +1,12 @@
 # CLI Getting Started Guide
 
-This guide helps you get started with the OpenAidy CLI for local administration.
+This guide helps you get started with the Aidy CLI for local administration.
 
 ## Prerequisites
 
 - Node.js 18+
 - pnpm (or npm/yarn)
-- OpenAidy repository cloned
+- Aidy repository cloned
 
 ## Installation
 
@@ -16,10 +16,10 @@ The CLI runs directly from the monorepo without global installation:
 
 ```bash
 # Navigate to repository root
-cd openaidy
+cd aidy
 
 # Run CLI via pnpm
-pnpm openaidy --help
+pnpm aidy --help
 ```
 
 ### Future: Global Installation
@@ -28,10 +28,10 @@ After the package is published to npm:
 
 ```bash
 # Install globally
-npm install -g @openaidy/cli
+npm install -g @aidyagent/cli
 
 # Run from anywhere
-openaidy --help
+aidy --help
 ```
 
 ## Initial Setup
@@ -43,22 +43,22 @@ The CLI requires a bootstrap-admin token for administrative operations.
 **Token Location:**
 
 ```
-$OPENAIDY_HOME/credentials/bootstrap-admin.json
-# or, when OPENAIDY_HOME is unset:
-.openaidy/credentials/bootstrap-admin.json
+$AIDY_HOME/credentials/bootstrap-admin.json
+# or, when AIDY_HOME is unset:
+.aidy/credentials/bootstrap-admin.json
 ```
 
 **Generate a token (the canonical entry point):**
 
 ```bash
 # Re-run the installer (Unix/WSL/macOS)
-curl -fsSL https://openaidy.com/install.sh | bash
+curl -fsSL https://aidyagent.app/install.sh | bash
 
 # Or run the CLI's init command directly (idempotent)
-WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init
+WS_TOKEN_SECRET=$(openssl rand -hex 32) aidy init
 ```
 
-`openaidy init` prints the token to stdout in a parseable format:
+`aidy init` prints the token to stdout in a parseable format:
 
 ```
 Bootstrap admin token: <jwt>
@@ -67,47 +67,47 @@ Bootstrap admin token: <jwt>
 You can paste this token into the web UI's login screen on first use. See the [Installation Guide](./installation.md) for the full turnkey install flow.
 
 ```bash
-# Start the OpenAidy server (generates token on first run)
-pnpm --filter @openaidy/server start
+# Start the Aidy server (generates token on first run)
+pnpm --filter @aidyagent/server start
 ```
 
 **Verify token:**
 
 ```bash
-pnpm openaidy admin token show
+pnpm aidy admin token show
 ```
 
 ### 2. Verify Installation
 
 ```bash
 # Check version
-pnpm openaidy --version
+pnpm aidy --version
 
 # View help
-pnpm openaidy --help
+pnpm aidy --help
 
 # List available commands
-pnpm openaidy help
+pnpm aidy help
 ```
 
 ## Common Operations
 
 ### Managing Access Tokens
 
-Access tokens are used to log in to the OpenAidy web UI and to authenticate API requests. They require the server to be running with a database.
+Access tokens are used to log in to the Aidy web UI and to authenticate API requests. They require the server to be running with a database.
 
 ```bash
 # Create a full-admin token
-pnpm openaidy tokens create --name "My Token" --scopes "*"
+pnpm aidy tokens create --name "My Token" --scopes "*"
 
 # Create a scoped token for CI
-pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
+pnpm aidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
 
 # List all tokens
-pnpm openaidy tokens list
+pnpm aidy tokens list
 
 # Revoke a token by ID
-pnpm openaidy tokens revoke <id>
+pnpm aidy tokens revoke <id>
 ```
 
 **Expected Output (create):**
@@ -133,20 +133,20 @@ Use this token to log into the UI or authenticate API requests.
 
 ### Listing Device Pairing Requests
 
-When a new device attempts to pair with your OpenAidy server, it creates a pairing request:
+When a new device attempts to pair with your Aidy server, it creates a pairing request:
 
 ```bash
 # List all pending requests
-pnpm openaidy devices list
+pnpm aidy devices list
 
 # List all requests (any status)
-pnpm openaidy devices list --status all
+pnpm aidy devices list --status all
 
 # List approved requests
-pnpm openaidy devices list --status approved
+pnpm aidy devices list --status approved
 
 # Limit results
-pnpm openaidy devices list --limit 10
+pnpm aidy devices list --limit 10
 ```
 
 **Expected Output:**
@@ -172,10 +172,10 @@ Showing 2 pending requests
 
 ```bash
 # Approve with default scopes
-pnpm openaidy devices approve req_abc123
+pnpm aidy devices approve req_abc123
 
 # Approve with custom scopes
-pnpm openaidy devices approve req_abc123 --scopes chat,files,calendar
+pnpm aidy devices approve req_abc123 --scopes chat,files,calendar
 ```
 
 **Expected Output:**
@@ -193,7 +193,7 @@ Approved:  2026-04-01 14:35:00
 ### Denying a Device
 
 ```bash
-pnpm openaidy devices deny req_def456
+pnpm aidy devices deny req_def456
 ```
 
 **Expected Output:**
@@ -211,13 +211,13 @@ Denied:    2026-04-01 14:36:00
 
 ```bash
 # Show token info
-pnpm openaidy admin token show
+pnpm aidy admin token show
 
 # Show token file path
-pnpm openaidy admin token path
+pnpm aidy admin token path
 
 # Validate token
-pnpm openaidy admin token validate
+pnpm aidy admin token validate
 ```
 
 ## Troubleshooting
@@ -229,13 +229,13 @@ pnpm openaidy admin token validate
 **Solution:** Start the server first:
 
 ```bash
-pnpm --filter @openaidy/server dev
+pnpm --filter @aidyagent/server dev
 ```
 
 If the server runs on a non-default port, set:
 
 ```bash
-OPENAIDY_SERVER_URL=http://localhost:4000 pnpm openaidy tokens list
+AIDY_SERVER_URL=http://localhost:4000 pnpm aidy tokens list
 ```
 
 ### "Server returned 401"
@@ -250,10 +250,10 @@ OPENAIDY_SERVER_URL=http://localhost:4000 pnpm openaidy tokens list
 
 **Cause:** Bootstrap-admin token hasn't been generated.
 
-**Solution:** Start the OpenAidy server to generate the token:
+**Solution:** Start the Aidy server to generate the token:
 
 ```bash
-pnpm --filter @openaidy/server start
+pnpm --filter @aidyagent/server start
 ```
 
 ### "Token is expired"
@@ -263,8 +263,8 @@ pnpm --filter @openaidy/server start
 **Solution:** Restart the server to generate a new token, or delete the old token file first:
 
 ```bash
-rm .openaidy/credentials/bootstrap-admin.json
-pnpm --filter @openaidy/server start
+rm .aidy/credentials/bootstrap-admin.json
+pnpm --filter @aidyagent/server start
 ```
 
 ### "No pending requests"
@@ -274,7 +274,7 @@ pnpm --filter @openaidy/server start
 **Solution:** Check all request statuses:
 
 ```bash
-pnpm openaidy devices list --status all
+pnpm aidy devices list --status all
 ```
 
 ### "Request not found"
@@ -284,7 +284,7 @@ pnpm openaidy devices list --status all
 **Solution:** List current requests to find valid IDs:
 
 ```bash
-pnpm openaidy devices list
+pnpm aidy devices list
 ```
 
 ### "Request already approved/denied"

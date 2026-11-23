@@ -14,14 +14,14 @@ import {
   parsePermission,
   PERMISSION_RESOURCES,
   PERMISSION_ACTIONS,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Configuration for the validator
  */
 export interface ManifestValidatorConfig {
-  /** Current OpenAidy version to check compatibility against */
-  openAidyVersion: string;
+  /** Current Aidy version to check compatibility against */
+  aidyVersion: string;
   /** Whether to enable strict security checks */
   strictSecurity?: boolean;
   /** Custom permission allowed list */
@@ -40,7 +40,7 @@ export interface ValidationIssues {
  * Default validator configuration
  */
 const DEFAULT_CONFIG: ManifestValidatorConfig = {
-  openAidyVersion: '1.0.0',
+  aidyVersion: '1.0.0',
   strictSecurity: true,
   allowedPermissions: [],
 };
@@ -81,7 +81,7 @@ function validateAddonId(
   const errors: ValidationError[] = [];
 
   // Check for reserved IDs
-  const reservedIds = ['openaidy', 'system', 'admin', 'api', 'internal'];
+  const reservedIds = ['aidy', 'system', 'admin', 'api', 'internal'];
 
   if (reservedIds.includes(manifest.id)) {
     errors.push(
@@ -108,21 +108,21 @@ function validateAddonId(
 }
 
 /**
- * Validate OpenAidy version compatibility
+ * Validate Aidy version compatibility
  */
 function validateVersionCompatibility(
   manifest: AddonManifest,
   currentVersion: string,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
-  const { minVersion, maxVersion } = manifest.openaidy;
+  const { minVersion, maxVersion } = manifest.aidy;
 
   // Check minVersion
   if (minVersion) {
     if (!semver.valid(minVersion)) {
       errors.push(
         createValidationError(
-          'openaidy.minVersion',
+          'aidy.minVersion',
           'Invalid semver format',
           'INVALID_VERSION',
         ),
@@ -130,8 +130,8 @@ function validateVersionCompatibility(
     } else if (semver.gt(minVersion, currentVersion)) {
       errors.push(
         createValidationError(
-          'openaidy.minVersion',
-          `Addon requires OpenAidy ${minVersion}, but current version is ${currentVersion}`,
+          'aidy.minVersion',
+          `Addon requires Aidy ${minVersion}, but current version is ${currentVersion}`,
           'INCOMPATIBLE_VERSION',
         ),
       );
@@ -143,7 +143,7 @@ function validateVersionCompatibility(
     if (!semver.valid(maxVersion)) {
       errors.push(
         createValidationError(
-          'openaidy.maxVersion',
+          'aidy.maxVersion',
           'Invalid semver format',
           'INVALID_VERSION',
         ),
@@ -151,8 +151,8 @@ function validateVersionCompatibility(
     } else if (semver.lt(maxVersion, currentVersion)) {
       errors.push(
         createValidationError(
-          'openaidy.maxVersion',
-          `Addon supports up to OpenAidy ${maxVersion}, but current version is ${currentVersion}`,
+          'aidy.maxVersion',
+          `Addon supports up to Aidy ${maxVersion}, but current version is ${currentVersion}`,
           'INCOMPATIBLE_VERSION',
         ),
       );
@@ -168,7 +168,7 @@ function validateVersionCompatibility(
       if (semver.gt(minVersion, maxVersion)) {
         errors.push(
           createValidationError(
-            'openaidy',
+            'aidy',
             'minVersion cannot be greater than maxVersion',
             'INVALID_VERSION_RANGE',
           ),
@@ -409,13 +409,13 @@ function validateDependencies(manifest: AddonManifest): ValidationError[] {
     return errors;
   }
 
-  // Check for OpenAidy core dependencies
-  const openaidyDeps = Object.keys(manifest.dependencies).filter((dep) =>
-    dep.startsWith('@openaidy/'),
+  // Check for Aidy core dependencies
+  const aidyDeps = Object.keys(manifest.dependencies).filter((dep) =>
+    dep.startsWith('@aidyagent/'),
   );
 
-  if (openaidyDeps.length > 0) {
-    // These should match the openaidy version constraints
+  if (aidyDeps.length > 0) {
+    // These should match the aidy version constraints
     // Just a warning - not an error
   }
 
@@ -458,10 +458,7 @@ export class ManifestValidator {
     // Run all validations
     allErrors.push(...validateAddonId(typedManifest, existingAddonIds));
     allErrors.push(
-      ...validateVersionCompatibility(
-        typedManifest,
-        this.config.openAidyVersion,
-      ),
+      ...validateVersionCompatibility(typedManifest, this.config.aidyVersion),
     );
     allErrors.push(
       ...validatePermissions(
@@ -582,10 +579,10 @@ export function createManifestValidator(
 export function validateAddonManifest(
   manifest: unknown,
   existingAddonIds: string[] = [],
-  openAidyVersion?: string,
+  aidyVersion?: string,
 ): ManifestValidationResult {
   const validator = new ManifestValidator({
-    openAidyVersion: openAidyVersion || DEFAULT_CONFIG.openAidyVersion,
+    aidyVersion: aidyVersion || DEFAULT_CONFIG.aidyVersion,
   });
 
   return validator.validate(manifest, existingAddonIds);

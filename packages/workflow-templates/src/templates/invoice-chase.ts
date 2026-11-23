@@ -1,4 +1,4 @@
-import type { WorkflowTemplate } from '@openaidy/shared-types';
+import type { WorkflowTemplate } from '@aidyagent/shared-types';
 import {
   TELL_OWNER,
   agentInput,
@@ -51,7 +51,7 @@ export const invoiceChaseTemplate: WorkflowTemplate = {
       title: 'Draft reminders',
       description:
         'For each overdue invoice, draft a short, polite payment reminder in {{language}} with the amount, due date and payment link. ' +
-        `Then send the owner the list of reminders and ask them to approve them in OpenAidy. ${TELL_OWNER}`,
+        `Then send the owner the list of reminders and ask them to approve them in Aidy. ${TELL_OWNER}`,
       kind: 'agent',
       agent: '{{agent}}',
     },

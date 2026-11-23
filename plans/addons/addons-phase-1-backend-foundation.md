@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 1 establishes the core backend infrastructure for the addons system. This phase focuses on creating the data models, API endpoints, and security foundations that enable addons to be registered, managed, and securely communicate with OpenAidy.
+Phase 1 establishes the core backend infrastructure for the addons system. This phase focuses on creating the data models, API endpoints, and security foundations that enable addons to be registered, managed, and securely communicate with Aidy.
 
 ## Objectives
 
@@ -38,7 +38,7 @@ export interface AddonManifest {
   homepage?: string;
   repository?: string;
   license?: string;
-  openaidy: {
+  aidy: {
     minVersion: string;
     maxVersion?: string;
   };
@@ -153,9 +153,9 @@ export interface EnableAddonResponse {
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://openaidy.dev/schemas/addon-manifest-v1.json",
-  "title": "OpenAidy Addon Manifest",
-  "description": "Manifest file for OpenAidy addons",
+  "$id": "https://aidyagent.app/schemas/addon-manifest-v1.json",
+  "title": "Aidy Addon Manifest",
+  "description": "Manifest file for Aidy addons",
   "type": "object",
   "required": [
     "id",
@@ -163,7 +163,7 @@ export interface EnableAddonResponse {
     "version",
     "description",
     "author",
-    "openaidy",
+    "aidy",
     "entry",
     "permissions",
     "ui",
@@ -228,7 +228,7 @@ export interface EnableAddonResponse {
     "license": {
       "type": "string"
     },
-    "openaidy": {
+    "aidy": {
       "type": "object",
       "required": ["minVersion"],
       "properties": {
@@ -389,7 +389,7 @@ export interface EnableAddonResponse {
 
 ```typescript
 import { z } from 'zod';
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -429,7 +429,7 @@ export class ManifestValidator {
         homepage: z.string().url().optional(),
         repository: z.string().url().optional(),
         license: z.string().optional(),
-        openaidy: z.object({
+        aidy: z.object({
           minVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
           maxVersion: z
             .string()
@@ -526,7 +526,7 @@ export class ManifestValidator {
   }
 
   /**
-   * Check compatibility with current OpenAidy version
+   * Check compatibility with current Aidy version
    */
   static checkCompatibility(
     manifest: AddonManifest,
@@ -534,7 +534,7 @@ export class ManifestValidator {
   ): boolean {
     // Simple semver comparison - in real implementation use proper semver library
     const current = currentVersion.split('.').map(Number);
-    const min = manifest.openaidy.minVersion.split('.').map(Number);
+    const min = manifest.aidy.minVersion.split('.').map(Number);
 
     // Check minimum version
     for (let i = 0; i < 3; i++) {
@@ -543,8 +543,8 @@ export class ManifestValidator {
     }
 
     // Check maximum version if specified
-    if (manifest.openaidy.maxVersion) {
-      const max = manifest.openaidy.maxVersion.split('.').map(Number);
+    if (manifest.aidy.maxVersion) {
+      const max = manifest.aidy.maxVersion.split('.').map(Number);
       for (let i = 0; i < 3; i++) {
         if (current[i]! < max[i]!) return true;
         if (current[i]! > max[i]!) return false;
@@ -861,7 +861,7 @@ export function createAddonsRepository(db: Database): AddonsStore {
 **File: `apps/server/src/addons/service.ts`**
 
 ```typescript
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type {
   AddonManifest,
@@ -870,13 +870,13 @@ import type {
   CreateAddonResponse,
   UpdateAddonPermissionsRequest,
   EnableAddonResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { ManifestValidator } from './manifest-validator';
 
 export interface AddonServiceOptions {
   addonsStore: AddonsStore;
   authMiddleware: AuthMiddleware;
-  openaidyVersion: string;
+  aidyVersion: string;
 }
 
 export class AddonService {
@@ -894,13 +894,10 @@ export class AddonService {
 
     // Check compatibility
     if (
-      !ManifestValidator.checkCompatibility(
-        manifest,
-        this.options.openaidyVersion,
-      )
+      !ManifestValidator.checkCompatibility(manifest, this.options.aidyVersion)
     ) {
       throw new Error(
-        `Addon requires OpenAidy ${manifest.openaidy.minVersion}, current version is ${this.options.openaidyVersion}`,
+        `Addon requires Aidy ${manifest.aidy.minVersion}, current version is ${this.options.aidyVersion}`,
       );
     }
 
@@ -1147,7 +1144,7 @@ import type {
   UpdateAddonPermissionsRequest,
   EnableAddonResponse,
   AddonRecord,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 export type AddonRoutesOptions = {
   addonService: AddonService;
@@ -1337,7 +1334,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
 ```typescript
 import type { FastifyPluginAsync } from 'fastify';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 import { requireAuth } from '../middleware/require-auth';
 
 export interface AddonProxyOptions {
@@ -1346,7 +1343,7 @@ export interface AddonProxyOptions {
 }
 
 /**
- * Addon proxy service - secure intermediary between addons and OpenAidy APIs
+ * Addon proxy service - secure intermediary between addons and Aidy APIs
  */
 export const addonProxyRoutes: FastifyPluginAsync<AddonProxyOptions> = async (
   app,
@@ -1633,7 +1630,7 @@ export const addonProxyRoutes: FastifyPluginAsync<AddonProxyOptions> = async (
 import { createAddonService } from './addons/service';
 import { addonRoutes } from './routes/addons';
 import { addonProxyRoutes } from './addons/proxy';
-import { createAddonsRepository } from '@openaidy/db';
+import { createAddonsRepository } from '@aidyagent/db';
 
 // In the buildApp function, after existing services setup:
 
@@ -1642,7 +1639,7 @@ const addonsRepository = createAddonsRepository(db);
 const addonService = createAddonService({
   addonsStore: addonsRepository,
   authMiddleware,
-  openaidyVersion: '1.0.0', // TODO: Get from package.json
+  aidyVersion: '1.0.0', // TODO: Get from package.json
 });
 
 // Register addon management routes (admin only)
@@ -1667,9 +1664,12 @@ await app.register(addonProxyRoutes, {
 ```typescript
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AddonService } from './service';
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { AddonManifest, CreateAddonRequest } from '@openaidy/shared-types';
+import type {
+  AddonManifest,
+  CreateAddonRequest,
+} from '@aidyagent/shared-types';
 
 describe('AddonService', () => {
   let addonService: AddonService;
@@ -1682,7 +1682,7 @@ describe('AddonService', () => {
     version: '1.0.0',
     description: 'A test addon for unit testing',
     author: { name: 'Test Author' },
-    openaidy: { minVersion: '1.0.0' },
+    aidy: { minVersion: '1.0.0' },
     entry: './dist/index.js',
     permissions: [
       { type: 'agent', action: 'invoke', target: 'test-agent' },
@@ -1717,7 +1717,7 @@ describe('AddonService', () => {
     addonService = new AddonService({
       addonsStore: mockAddonsStore,
       authMiddleware: mockAuthMiddleware,
-      openaidyVersion: '1.0.0',
+      aidyVersion: '1.0.0',
     });
   });
 
@@ -1760,7 +1760,7 @@ describe('AddonService', () => {
     it('should throw error for incompatible version', async () => {
       const incompatibleManifest = {
         ...mockManifest,
-        openaidy: { minVersion: '2.0.0' },
+        aidy: { minVersion: '2.0.0' },
       };
 
       const request: CreateAddonRequest = {
@@ -1770,7 +1770,7 @@ describe('AddonService', () => {
 
       await expect(
         addonService.installAddon(request, 'test-user'),
-      ).rejects.toThrow('requires OpenAidy 2.0.0');
+      ).rejects.toThrow('requires Aidy 2.0.0');
     });
 
     it('should throw error for duplicate addon', async () => {
@@ -1834,7 +1834,7 @@ Phase 1 is complete when:
 2. ✅ **Database Persistence**: Addons can be stored, retrieved, and managed in the database
 3. ✅ **Permission System**: Addons request and receive specific permissions for agent access
 4. ✅ **Registry API**: Admin can install, enable, disable, and configure addons via REST API
-5. ✅ **Proxy Service**: Addons can communicate with OpenAidy through secure proxy with permission enforcement
+5. ✅ **Proxy Service**: Addons can communicate with Aidy through secure proxy with permission enforcement
 6. ✅ **Authentication**: Addons receive JWT tokens with only their approved permissions
 7. ✅ **Usage Tracking**: All addon API calls are logged and metered
 
@@ -1846,4 +1846,4 @@ After Phase 1 completion:
 - Create example addon to test the backend infrastructure
 - Write comprehensive integration tests for the addon lifecycle
 
-This phase provides the secure backend foundation that enables addons to be safely integrated into OpenAidy while maintaining strict access controls and auditability.
+This phase provides the secure backend foundation that enables addons to be safely integrated into Aidy while maintaining strict access controls and auditability.

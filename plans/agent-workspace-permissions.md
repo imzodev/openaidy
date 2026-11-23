@@ -44,7 +44,7 @@ Before implementing, review these existing components to avoid duplication:
 import { AgentSchema, type Agent, type AgentSummary } from './schema';
 
 // From packages/shared-types
-import type { AgentId, SessionId } from '@openaidy/shared-types';
+import type { AgentId, SessionId } from '@aidyagent/shared-types';
 ```
 
 ## Architecture
@@ -52,7 +52,7 @@ import type { AgentId, SessionId } from '@openaidy/shared-types';
 ```mermaid
 flowchart TB
     subgraph Agent Config
-        A[config/openaidy.template.json] --> B[workspace.permissions]
+        A[config/aidy.template.json] --> B[workspace.permissions]
     end
 
     subgraph Server
@@ -125,7 +125,7 @@ import path from 'path';
 // REUSE: Import existing logger
 import { logger } from '../lib/logger';
 // REUSE: Import error types
-import { ValidationError, NotFoundError } from '@openaidy/runtime/errors';
+import { ValidationError, NotFoundError } from '@aidyagent/runtime/errors';
 
 export interface FileInfo {
   name: string;
@@ -406,7 +406,7 @@ import { WorkspaceService } from '../workspace/service';
 import { AgentRegistry } from '../agents/registry';
 import { validateWorkspaceAccess } from '../workspace/permissions';
 // REUSE: Use existing error handling
-import { errorHandler, AppError } from '@openaidy/runtime/errors';
+import { errorHandler, AppError } from '@aidyagent/runtime/errors';
 
 // REUSE: Get singleton instances from app context
 const getAgentRegistry = (): AgentRegistry => {
@@ -748,9 +748,9 @@ export async function deleteWorkspaceFile(
 }
 ```
 
-### Step 6: Update OpenAidy Config
+### Step 6: Update Aidy Config
 
-File: `config/openaidy.template.json`
+File: `config/aidy.template.json`
 
 Add workspace configuration to each agent in the agents array:
 
@@ -782,7 +782,7 @@ Add workspace configuration to each agent in the agents array:
 }
 ```
 
-Note: This replaces the earlier suggestion of using separate config files in `config/agents/`. The unified `config/openaidy.template.json` approach keeps all configuration in one place.
+Note: This replaces the earlier suggestion of using separate config files in `config/agents/`. The unified `config/aidy.template.json` approach keeps all configuration in one place.
 
 ## Permission Matrix Example
 
@@ -805,8 +805,8 @@ For scenario: Agent1 → Agent2, Agent2 → Agent3, Agent3 blocked
 | `apps/server/src/app.ts`                             | Modify - register routes                |
 | `apps/web/src/components/workspace/FileExplorer.tsx` | Create - UI component                   |
 | `apps/web/src/lib/api.ts`                            | Modify - add workspace API calls        |
-| `.openaidy/openaidy.json`                            | Modify - add workspace config to agents |
-| `config/openaidy.template.json`                      | Modify - add workspace config template  |
+| `.aidy/aidy.json`                                    | Modify - add workspace config to agents |
+| `config/aidy.template.json`                          | Modify - add workspace config template  |
 
 ## Security Considerations
 
@@ -870,7 +870,7 @@ When implementing, follow these guidelines:
 | **Extend Existing Schemas**   | Don't recreate `AgentSchema`, add workspace config to existing |
 | **Use AgentRegistry**         | For all agent lookups, don't create new data stores            |
 | **Follow Service Patterns**   | Match `ConfigService`, `AgentRegistry` patterns                |
-| **Use Existing Error Types**  | Import from `@openaidy/runtime/errors`                         |
+| **Use Existing Error Types**  | Import from `@aidyagent/runtime/errors`                        |
 | **Use Existing Logger**       | Import from `../lib/logger`                                    |
 | **Follow API Patterns**       | Match existing route patterns in `apps/server/src/routes/`     |
 | **Follow Component Patterns** | Match existing SolidJS patterns in web components              |

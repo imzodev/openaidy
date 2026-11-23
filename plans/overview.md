@@ -1,17 +1,17 @@
 ---
-summary: 'Product overview for OpenAidy'
+summary: 'Product overview for Aidy'
 read_when:
-  - You want a high-level explanation of what OpenAidy is
+  - You want a high-level explanation of what Aidy is
   - You need a product-facing summary of its purpose, features, and design goals
   - You want onboarding material before reading architecture or implementation docs
-title: 'What is OpenAidy'
+title: 'What is Aidy'
 ---
 
-# What is OpenAidy
+# What is Aidy
 
-OpenAidy is a plugin-first AI operations platform for running agents, orchestrating automated work, connecting messaging channels, and extending both the backend and UI through stable public APIs.
+Aidy is a plugin-first AI operations platform for running agents, orchestrating automated work, connecting messaging channels, and extending both the backend and UI through stable public APIs.
 
-At a high level, OpenAidy is designed to help individuals and teams:
+At a high level, Aidy is designed to help individuals and teams:
 
 - run AI agents in persistent sessions
 - schedule and automate agent work
@@ -30,7 +30,7 @@ Many agent platforms are either:
 - good at automation, but weak at real-time operator workflows
 - good for one internal product team, but hard to extend safely
 
-OpenAidy is intended to solve that by combining:
+Aidy is intended to solve that by combining:
 
 - real-time session management
 - scheduled and event-driven agent execution
@@ -43,7 +43,7 @@ in one platform with explicit contracts.
 
 ## Core idea
 
-OpenAidy should be a small, stable orchestration core with a large extension surface.
+Aidy should be a small, stable orchestration core with a large extension surface.
 
 The core is responsible for:
 
@@ -71,7 +71,7 @@ This keeps the product flexible without requiring plugins to rely on private imp
 
 ## Real-time Communication
 
-OpenAidy provides a WebSocket gateway for real-time, bidirectional communication:
+Aidy provides a WebSocket gateway for real-time, bidirectional communication:
 
 - **Instant messaging** - Real-time message delivery without polling
 - **Streaming responses** - Token-by-token streaming of AI responses
@@ -85,7 +85,7 @@ For details, see [WebSocket Protocol](./websocket-protocol) and [WebSocket Clien
 
 Sessions are the main container for conversations, agent runs, and transcripts.
 
-OpenAidy should support:
+Aidy should support:
 
 - creating and managing persistent sessions
 - storing transcript history and artifacts
@@ -97,7 +97,7 @@ OpenAidy should support:
 
 Agents should be dispatchable manually or automatically.
 
-OpenAidy should support:
+Aidy should support:
 
 - manual dispatch from the UI or API
 - dispatch into an existing session
@@ -106,7 +106,7 @@ OpenAidy should support:
 
 ## Scheduler and cron
 
-OpenAidy should support recurring and one-off automation.
+Aidy should support recurring and one-off automation.
 
 Examples:
 
@@ -126,7 +126,7 @@ The scheduler should support:
 
 ## Channels
 
-OpenAidy should connect agents to messaging platforms through channel plugins.
+Aidy should connect agents to messaging platforms through channel plugins.
 
 Examples:
 
@@ -142,7 +142,7 @@ The platform should normalize inbound and outbound messaging while keeping chann
 
 ## Instances and runtime presence
 
-OpenAidy should track connected runtimes and operator clients as instances.
+Aidy should track connected runtimes and operator clients as instances.
 
 Examples:
 
@@ -160,7 +160,7 @@ This should make it possible to:
 
 ## Device pairing
 
-OpenAidy should include a trust and pairing system for browsers, workers, and connected runtimes.
+Aidy should include a trust and pairing system for browsers, workers, and connected runtimes.
 
 This should support:
 
@@ -172,7 +172,7 @@ This should support:
 
 ## Configuration
 
-OpenAidy should make configuration easy to understand and safe to change.
+Aidy should make configuration easy to understand and safe to change.
 
 It should support:
 
@@ -184,7 +184,7 @@ It should support:
 
 ## Plugin system
 
-The plugin system is a central feature of OpenAidy.
+The plugin system is a central feature of Aidy.
 
 Plugin types should include:
 
@@ -204,12 +204,12 @@ The plugin model should emphasize:
 
 ## MCP integration
 
-OpenAidy should treat MCP as a first-class interoperability layer.
+Aidy should treat MCP as a first-class interoperability layer.
 
 It should support:
 
 - using MCP servers as external tool and resource providers
-- exposing selected OpenAidy operations as MCP tools
+- exposing selected Aidy operations as MCP tools
 - mapping MCP tools into agent workflows
 - combining plugin and MCP-based integrations cleanly
 
@@ -243,7 +243,7 @@ A single user runs agents from a web UI, schedules recurring jobs, and connects 
 
 ### Team operations dashboard
 
-A small team uses OpenAidy to monitor sessions, review scheduled tasks, pair trusted devices, and extend the dashboard with custom internal panels.
+A small team uses Aidy to monitor sessions, review scheduled tasks, pair trusted devices, and extend the dashboard with custom internal panels.
 
 ### Channel-driven automation
 
@@ -255,11 +255,11 @@ Developers build plugins for custom tools, provider adapters, and dashboards wit
 
 ### MCP-enabled control plane
 
-OpenAidy consumes external MCP servers for tools and resources while also exposing selected platform operations to other MCP-capable environments.
+Aidy consumes external MCP servers for tools and resources while also exposing selected platform operations to other MCP-capable environments.
 
 ## Intended audience
 
-OpenAidy is aimed at:
+Aidy is aimed at:
 
 - individual operators running personal AI workflows
 - teams building internal AI operations tooling
@@ -268,7 +268,7 @@ OpenAidy is aimed at:
 
 ## Why Node.js and TypeScript
 
-OpenAidy is intended to use Node.js and TypeScript because they provide a good balance of:
+Aidy is intended to use Node.js and TypeScript because they provide a good balance of:
 
 - runtime performance for orchestration and real-time systems
 - strong compatibility with AI SDKs and web tooling
@@ -277,7 +277,7 @@ OpenAidy is intended to use Node.js and TypeScript because they provide a good b
 
 ## Summary
 
-OpenAidy is intended to be an extensible agent platform with:
+Aidy is intended to be an extensible agent platform with:
 
 - persistent sessions
 - agent dispatch

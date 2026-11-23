@@ -11,13 +11,13 @@ import type {
   ModelResponse,
   ProviderError,
   ModelProvider,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type {
   ProviderConfig,
   SecretProvider,
   ResolvedProviderConfig,
-} from '@openaidy/config';
-import type { CredentialProvider } from '@openaidy/shared-types';
+} from '@aidyagent/config';
+import type { CredentialProvider } from '@aidyagent/shared-types';
 
 /**
  * Options for the IntegratedInvocationService
@@ -76,7 +76,7 @@ export type SelectionWithConfigResult =
 
 /**
  * Re-export of `ProviderConfig` so consumers that only import from
- * this file don't have to reach into `@openaidy/config` for the
+ * this file don't have to reach into `@aidyagent/config` for the
  * config type used by the registration API.
  */
 export type { ProviderConfig };

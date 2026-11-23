@@ -1,8 +1,8 @@
 /**
- * openaidy status — Report server state (PR2 T2.4)
+ * aidy status — Report server state (PR2 T2.4)
  *
  * Behavior (per spec R-9):
- *  1. Read PID JSON from $OPENAIDY_HOME/state/server.pid
+ *  1. Read PID JSON from $AIDY_HOME/state/server.pid
  *  2. Check process liveness via isProcessAlive
  *  3. Read bootstrap-admin token from config's tokenPath
  *  4. Format output:
@@ -31,9 +31,9 @@ import {
 // ============================================================================
 
 const HELP_TEXT = `
-Usage: openaidy status [options]
+Usage: aidy status [options]
 
-Show the current status of the OpenAidy server and web frontend.
+Show the current status of the Aidy server and web frontend.
 
 Displays:
   - Server state: running or stopped
@@ -71,7 +71,7 @@ export function maskToken(token: string): string {
 // ============================================================================
 
 /**
- * The `openaidy status` command handler.
+ * The `aidy status` command handler.
  *
  * @param args - CLI arguments
  * @param envOverride - test-only env override (defaults to process.env)
@@ -85,7 +85,7 @@ export async function statusHandler(
   }
 
   const env = envOverride ?? process.env;
-  const home = env.OPENAIDY_HOME ?? resolve(homedir(), '.openaidy');
+  const home = env.AIDY_HOME ?? resolve(homedir(), '.aidy');
   const pidPath = resolve(home, 'state', 'server.pid');
   const webPidPath = resolve(home, 'state', 'web.pid');
 
@@ -144,7 +144,7 @@ export async function statusHandler(
         `  Log:   ${webRec.logFile}`,
       );
     } else {
-      lines.push(`Web: stopped (run \`openaidy start\` to start it)`);
+      lines.push(`Web: stopped (run \`aidy start\` to start it)`);
     }
     lines.push(
       `Token: ${tokenStatus} (value masked: ${tokenValue ? maskToken(tokenValue) : 'N/A'})`,

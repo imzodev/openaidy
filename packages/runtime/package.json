@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/runtime",
+  "name": "@aidyagent/runtime",
   "private": true,
   "type": "module",
   "exports": {

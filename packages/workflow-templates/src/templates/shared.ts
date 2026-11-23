@@ -1,7 +1,7 @@
 import type {
   TemplateInput,
   TemplateRequirement,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Inputs and requirements the small-business templates share, so every

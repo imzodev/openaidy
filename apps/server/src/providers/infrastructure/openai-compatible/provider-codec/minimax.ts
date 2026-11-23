@@ -20,7 +20,7 @@
  * separate rework of the streaming loop ΓÇö out of scope here.
  */
 
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 import type {
   ProviderAdapterCodec,
   ToolNameMapping,

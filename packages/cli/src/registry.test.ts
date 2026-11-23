@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 const exec = promisify(execFile);
 
 // Path to CLI entrypoint
-const cliPath = resolve(__dirname, '../bin/openaidy.ts');
+const cliPath = resolve(__dirname, '../bin/aidy.ts');
 
 // Read package.json once
 const packageJsonPath = resolve(__dirname, '../package.json');
@@ -46,7 +46,7 @@ describe('CLI Command Registry', () => {
     it('shows help with no arguments', async () => {
       const { stdout } = await runCli([]);
 
-      expect(stdout).toContain('openaidy');
+      expect(stdout).toContain('aidy');
       expect(stdout).toContain('Usage:');
       expect(stdout).toContain('Command Groups:');
     });
@@ -54,7 +54,7 @@ describe('CLI Command Registry', () => {
     it('shows help with --help flag', async () => {
       const { stdout } = await runCli(['--help']);
 
-      expect(stdout).toContain('openaidy');
+      expect(stdout).toContain('aidy');
       expect(stdout).toContain('Usage:');
       expect(stdout).toContain('Command Groups:');
     });
@@ -70,7 +70,7 @@ describe('CLI Command Registry', () => {
     it('shows version with --version flag', async () => {
       const { stdout } = await runCli(['--version']);
 
-      expect(stdout).toContain('openaidy');
+      expect(stdout).toContain('aidy');
       expect(stdout).toMatch(/v?\d+\.\d+\.\d+/);
     });
   });
@@ -124,7 +124,7 @@ describe('CLI Command Registry', () => {
       const { stdout } = await runCli(['admin', 'token', 'show', '--help']);
 
       expect(stdout).toContain('Examples:');
-      expect(stdout).toContain('pnpm openaidy');
+      expect(stdout).toContain('pnpm aidy');
     });
   });
 
@@ -205,13 +205,13 @@ describe('CLI Command Registry', () => {
 });
 
 describe('Package structure', () => {
-  it('exposes binary as openaidy', () => {
+  it('exposes binary as aidy', () => {
     expect(packageJson.bin).toBeDefined();
-    expect(packageJson.bin.openaidy).toBe('./bin/openaidy.ts');
+    expect(packageJson.bin.aidy).toBe('./bin/aidy.ts');
   });
 
   it('has correct package name', () => {
-    expect(packageJson.name).toBe('@openaidy/cli');
+    expect(packageJson.name).toBe('@aidyagent/cli');
   });
 
   it('exports main entrypoint', () => {
@@ -227,14 +227,14 @@ describe('Package structure', () => {
 
 describe('Repo-local invocation', () => {
   // Skipped: requires pnpm in PATH; fails when only corepack shims are available
-  it.skip('can be invoked via pnpm openaidy from repo root', async () => {
+  it.skip('can be invoked via pnpm aidy from repo root', async () => {
     const repoRoot = resolve(__dirname, '../../..');
-    const { stdout } = await exec('pnpm', ['openaidy', '--help'], {
+    const { stdout } = await exec('pnpm', ['aidy', '--help'], {
       cwd: repoRoot,
       timeout: 15000,
     });
 
-    expect(stdout).toContain('openaidy');
+    expect(stdout).toContain('aidy');
     expect(stdout).toContain('Usage:');
     expect(stdout).toContain('Command Groups:');
   });
@@ -245,7 +245,7 @@ describe('Repo-local invocation', () => {
     try {
       const { stdout } = await exec(
         'pnpm',
-        ['openaidy', 'admin', 'token', 'show'],
+        ['aidy', 'admin', 'token', 'show'],
         {
           cwd: repoRoot,
           timeout: 15000,

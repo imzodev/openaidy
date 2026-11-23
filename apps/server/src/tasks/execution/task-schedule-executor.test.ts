@@ -5,7 +5,7 @@ import {
   type TaskScheduleExecutorDeps,
   type TaskSchedulePayload,
 } from './task-schedule-executor';
-import type { Task, Subtask, TaskAgent, TaskSchedule } from '@openaidy/db';
+import type { Task, Subtask, TaskAgent, TaskSchedule } from '@aidyagent/db';
 
 // ============================================================================
 // Fakes (in-memory implementations of the repos the executor depends on).

@@ -1,11 +1,11 @@
 # CLI Command Reference
 
-Complete reference for all OpenAidy CLI commands.
+Complete reference for all Aidy CLI commands.
 
 ## Global Options
 
 ```bash
-openaidy [options]
+aidy [options]
 
 Options:
   --help, -h      Show help
@@ -27,7 +27,7 @@ Show the current bootstrap-admin token information.
 **Usage:**
 
 ```bash
-openaidy admin token show
+aidy admin token show
 ```
 
 **Arguments:** None
@@ -47,7 +47,7 @@ Displays information about the bootstrap-admin token:
 
 ```bash
 # Show token info
-pnpm openaidy admin token show
+pnpm aidy admin token show
 ```
 
 **Sample Output (Valid Token):**
@@ -57,7 +57,7 @@ Bootstrap Admin Token
 ========================
 
 Status:    valid
-Path:      .openaidy/credentials/bootstrap-admin.json
+Path:      .aidy/credentials/bootstrap-admin.json
 Enabled:   true
 Client ID: admin_abc123
 Created:   2026-04-01 10:00:00
@@ -74,7 +74,7 @@ Bootstrap Admin Token
 ========================
 
 Status:    missing
-Path:      .openaidy/credentials/bootstrap-admin.json
+Path:      .aidy/credentials/bootstrap-admin.json
 Enabled:   true
 
 Error: Token file not found
@@ -95,7 +95,7 @@ Validate the bootstrap-admin token.
 **Usage:**
 
 ```bash
-openaidy admin token validate
+aidy admin token validate
 ```
 
 **Arguments:** None
@@ -114,7 +114,7 @@ Checks that the bootstrap-admin token:
 **Examples:**
 
 ```bash
-pnpm openaidy admin token validate
+pnpm aidy admin token validate
 ```
 
 **Exit Codes:**
@@ -132,7 +132,7 @@ Show the path to the bootstrap-admin token file.
 **Usage:**
 
 ```bash
-openaidy admin token path
+aidy admin token path
 ```
 
 **Arguments:** None
@@ -146,13 +146,13 @@ Outputs the file path where the bootstrap-admin token is stored.
 **Examples:**
 
 ```bash
-pnpm openaidy admin token path
+pnpm aidy admin token path
 ```
 
 **Output:**
 
 ```
-.openaidy/credentials/bootstrap-admin.json
+.aidy/credentials/bootstrap-admin.json
 ```
 
 **Exit Codes:**
@@ -166,7 +166,7 @@ pnpm openaidy admin token path
 
 Commands for creating and managing access tokens used for UI login and API access.
 
-> **Requires:** Server running with a database (`DB_KIND=sqlite` or `DB_KIND=postgres`). Uses the bootstrap-admin token from `.openaidy/credentials/bootstrap-admin.json`.
+> **Requires:** Server running with a database (`DB_KIND=sqlite` or `DB_KIND=postgres`). Uses the bootstrap-admin token from `.aidy/credentials/bootstrap-admin.json`.
 
 ---
 
@@ -177,7 +177,7 @@ List all access tokens.
 **Usage:**
 
 ```bash
-openaidy tokens list
+aidy tokens list
 ```
 
 **Arguments:** None
@@ -191,7 +191,7 @@ Displays all access tokens grouped into active and revoked. Does not expose raw 
 **Examples:**
 
 ```bash
-pnpm openaidy tokens list
+pnpm aidy tokens list
 ```
 
 **Sample Output:**
@@ -237,7 +237,7 @@ Create a new access token.
 **Usage:**
 
 ```bash
-openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]
+aidy tokens create --name <name> --scopes <scopes> [--expires <date>]
 ```
 
 **Arguments:** None
@@ -267,19 +267,19 @@ openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]
 
 Creates a new access token and prints the raw `oat_…` value **once**. The raw token is never stored — if you lose it, you must revoke and recreate it.
 
-The token can be used to log in to the OpenAidy web UI or to authenticate REST/WebSocket API requests.
+The token can be used to log in to the Aidy web UI or to authenticate REST/WebSocket API requests.
 
 **Examples:**
 
 ```bash
 # Create a full-admin token
-pnpm openaidy tokens create --name "Admin Key" --scopes "*"
+pnpm aidy tokens create --name "Admin Key" --scopes "*"
 
 # Create a read-only CI token
-pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
+pnpm aidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
 
 # Create a temporary token that expires end of year
-pnpm openaidy tokens create --name "Temp Access" --scopes "sessions.read" --expires "2026-12-31"
+pnpm aidy tokens create --name "Temp Access" --scopes "sessions.read" --expires "2026-12-31"
 ```
 
 **Sample Output:**
@@ -315,7 +315,7 @@ Revoke an access token by ID.
 **Usage:**
 
 ```bash
-openaidy tokens revoke <id>
+aidy tokens revoke <id>
 ```
 
 **Arguments:**
@@ -332,7 +332,7 @@ Permanently revokes the token. Any sessions or API calls using the revoked token
 **Examples:**
 
 ```bash
-pnpm openaidy tokens revoke a1b2c3d4-e5f6-...
+pnpm aidy tokens revoke a1b2c3d4-e5f6-...
 ```
 
 **Sample Output:**
@@ -363,7 +363,7 @@ List device pairing requests.
 **Usage:**
 
 ```bash
-openaidy devices list [options]
+aidy devices list [options]
 ```
 
 **Arguments:** None
@@ -376,25 +376,25 @@ openaidy devices list [options]
 
 **Description:**
 
-Lists pairing requests from devices attempting to connect to the OpenAidy server.
+Lists pairing requests from devices attempting to connect to the Aidy server.
 
 **Examples:**
 
 ```bash
 # List pending requests (default)
-pnpm openaidy devices list
+pnpm aidy devices list
 
 # List all requests
-pnpm openaidy devices list --status all
+pnpm aidy devices list --status all
 
 # List approved requests
-pnpm openaidy devices list --status approved
+pnpm aidy devices list --status approved
 
 # Limit to 10 results
-pnpm openaidy devices list --limit 10
+pnpm aidy devices list --limit 10
 
 # Combine filters
-pnpm openaidy devices list --status expired --limit 20
+pnpm aidy devices list --status expired --limit 20
 ```
 
 **Sample Output (Pending):**
@@ -437,7 +437,7 @@ Approve a pending device pairing request.
 **Usage:**
 
 ```bash
-openaidy devices approve <request-id> [options]
+aidy devices approve <request-id> [options]
 ```
 
 **Arguments:**
@@ -458,13 +458,13 @@ Approves a pending pairing request, allowing the device to connect. Optionally s
 
 ```bash
 # Approve with default scopes
-pnpm openaidy devices approve req_abc123
+pnpm aidy devices approve req_abc123
 
 # Approve with custom scopes
-pnpm openaidy devices approve req_abc123 --scopes chat,files,calendar
+pnpm aidy devices approve req_abc123 --scopes chat,files,calendar
 
 # Approve with minimal scopes
-pnpm openaidy devices approve req_abc123 --scopes chat
+pnpm aidy devices approve req_abc123 --scopes chat
 ```
 
 **Sample Output (Success):**
@@ -506,7 +506,7 @@ Deny a pending device pairing request.
 **Usage:**
 
 ```bash
-openaidy devices deny <request-id>
+aidy devices deny <request-id>
 ```
 
 **Arguments:**
@@ -524,7 +524,7 @@ Denies a pending pairing request, preventing the device from connecting.
 
 ```bash
 # Deny a request
-pnpm openaidy devices deny req_def456
+pnpm aidy devices deny req_def456
 ```
 
 **Sample Output (Success):**
@@ -556,7 +556,7 @@ Commands for managing chat sessions.
 List all sessions.
 
 ```bash
-openaidy sessions list [--limit <n>]
+aidy sessions list [--limit <n>]
 ```
 
 #### `sessions create`
@@ -564,7 +564,7 @@ openaidy sessions list [--limit <n>]
 Create a new session.
 
 ```bash
-openaidy sessions create [title]
+aidy sessions create [title]
 ```
 
 #### `sessions get`
@@ -572,7 +572,7 @@ openaidy sessions create [title]
 Get session details by ID.
 
 ```bash
-openaidy sessions get <sessionId>
+aidy sessions get <sessionId>
 ```
 
 #### `sessions messages`
@@ -580,7 +580,7 @@ openaidy sessions get <sessionId>
 List all messages in a session.
 
 ```bash
-openaidy sessions messages <sessionId>
+aidy sessions messages <sessionId>
 ```
 
 #### `sessions runs`
@@ -588,7 +588,7 @@ openaidy sessions messages <sessionId>
 List all runs for a session.
 
 ```bash
-openaidy sessions runs <sessionId>
+aidy sessions runs <sessionId>
 ```
 
 ---
@@ -607,8 +607,8 @@ Reference secrets with `${ENV_VAR}` placeholders — they are resolved from the
 server environment at connection time and never persisted in plaintext.
 
 ```bash
-openaidy mcp import ./mcp.json
-cat ~/.config/mcp.json | openaidy mcp import
+aidy mcp import ./mcp.json
+cat ~/.config/mcp.json | aidy mcp import
 ```
 
 Requires an admin token.
@@ -616,7 +616,7 @@ Requires an admin token.
 #### `mcp migrate-secrets`
 
 One-shot migration: walk every persisted MCP server's `env`/`headers` and
-encrypt plaintext inline secrets in-place, so a copy of `~/.openaidy/openaidy.json`
+encrypt plaintext inline secrets in-place, so a copy of `~/.aidy/aidy.json`
 no longer exposes raw credentials. Existing installs that pasted a token
 directly into a header (the issue #401 scenario) end up with the same value
 re-written as `enc:v1:…` ciphertext.
@@ -626,8 +626,8 @@ a no-op. `${ENV_VAR}` references are left as plain placeholders — their
 secret lives in the process environment, not the config.
 
 ```bash
-openaidy mcp migrate-secrets --dry-run   # show the plan without writing
-openaidy mcp migrate-secrets             # apply
+aidy mcp migrate-secrets --dry-run   # show the plan without writing
+aidy mcp migrate-secrets             # apply
 ```
 
 Options:
@@ -647,7 +647,7 @@ Commands for managing LLM provider connections.
 List all available providers.
 
 ```bash
-openaidy providers list
+aidy providers list
 ```
 
 #### `providers connect`
@@ -655,7 +655,7 @@ openaidy providers list
 Connect to a provider.
 
 ```bash
-openaidy providers connect <provider-id> [--api-key <key>]
+aidy providers connect <provider-id> [--api-key <key>]
 ```
 
 #### `providers disconnect`
@@ -663,47 +663,47 @@ openaidy providers connect <provider-id> [--api-key <key>]
 Disconnect from a provider.
 
 ```bash
-openaidy providers disconnect <provider-id>
+aidy providers disconnect <provider-id>
 ```
 
 ---
 
 ## Server Management Commands
 
-Top-level commands for controlling the OpenAidy server process.
+Top-level commands for controlling the Aidy server process.
 
 #### `start`
 
-Start the OpenAidy server as a background process.
+Start the Aidy server as a background process.
 
 ```bash
-openaidy start
-openaidy start --foreground
+aidy start
+aidy start --foreground
 ```
 
-`--foreground` keeps the CLI attached to the server: it forwards `SIGTERM`/`SIGINT` and exits with the server's exit code. That's what the systemd unit from `openaidy service install` runs, so a crash shows up to systemd as the process exiting and it restarts the server. Foreground mode never starts the Vite web frontend.
+`--foreground` keeps the CLI attached to the server: it forwards `SIGTERM`/`SIGINT` and exits with the server's exit code. That's what the systemd unit from `aidy service install` runs, so a crash shows up to systemd as the process exiting and it restarts the server. Foreground mode never starts the Vite web frontend.
 
 When the service is installed, `start`, `stop` and `restart` control it through `systemctl` instead of spawning or killing a server themselves, so only one server ever runs.
 
 #### `stop`
 
-Stop the running OpenAidy server.
+Stop the running Aidy server.
 
 ```bash
-openaidy stop
+aidy stop
 ```
 
 #### `restart`
 
-Restart the running OpenAidy server: stops it (gracefully) then starts a fresh one. Equivalent to running `openaidy stop` followed by `openaidy start`, but in a single command with port preservation and a coherent exit code (0 only if both steps succeed).
+Restart the running Aidy server: stops it (gracefully) then starts a fresh one. Equivalent to running `aidy stop` followed by `aidy start`, but in a single command with port preservation and a coherent exit code (0 only if both steps succeed).
 
 ```bash
-openaidy restart
-openaidy restart --port 3001
-openaidy restart --integrated
+aidy restart
+aidy restart --port 3001
+aidy restart --integrated
 ```
 
-The port from the previous server PID file is preserved by default, so the user's browser tab and any client config stays pointed at the same origin. Pass `--port` to override (same semantics as `openaidy start`). `--server-only` and `--integrated` work exactly like `start`.
+The port from the previous server PID file is preserved by default, so the user's browser tab and any client config stays pointed at the same origin. Pass `--port` to override (same semantics as `aidy start`). `--server-only` and `--integrated` work exactly like `start`.
 
 If `stop` fails, `start` is **not** attempted — otherwise you'd risk starting a second server on a still-busy port. The stop error is surfaced directly.
 
@@ -712,40 +712,40 @@ If `stop` fails, `start` is **not** attempted — otherwise you'd risk starting 
 Show the current server status.
 
 ```bash
-openaidy status
+aidy status
 ```
 
 ### `service` - Run Under systemd
 
-`openaidy start` on its own isn't supervised: if the server dies (for example, killed for running out of memory) it stays down. Installing the service hands the server to systemd, which starts it at boot and restarts it within 5 seconds whenever it exits. Linux with systemd only.
+`aidy start` on its own isn't supervised: if the server dies (for example, killed for running out of memory) it stays down. Installing the service hands the server to systemd, which starts it at boot and restarts it within 5 seconds whenever it exits. Linux with systemd only.
 
-As root, the unit is installed system-wide at `/etc/systemd/system/openaidy.service`. Other users get a user unit at `~/.config/systemd/user/openaidy.service`, with lingering enabled (`loginctl enable-linger`) so it keeps running after logout.
+As root, the unit is installed system-wide at `/etc/systemd/system/aidy.service`. Other users get a user unit at `~/.config/systemd/user/aidy.service`, with lingering enabled (`loginctl enable-linger`) so it keeps running after logout.
 
 #### `service install`
 
-Write the unit, enable it and start it. A server already running from `openaidy start` is stopped first and handed over. Re-run it to update the unit (e.g. after changing `--port`).
+Write the unit, enable it and start it. A server already running from `aidy start` is stopped first and handed over. Re-run it to update the unit (e.g. after changing `--port`).
 
 ```bash
-openaidy service install
-openaidy service install --port 3001
+aidy service install
+aidy service install --port 3001
 ```
 
-Logs still go to `$OPENAIDY_HOME/logs/server.log`.
+Logs still go to `$AIDY_HOME/logs/server.log`.
 
 #### `service uninstall`
 
-Stop and disable the service and remove its unit file. Data in `OPENAIDY_HOME` is untouched; run `openaidy start` to go back to an unmanaged server.
+Stop and disable the service and remove its unit file. Data in `AIDY_HOME` is untouched; run `aidy start` to go back to an unmanaged server.
 
 ```bash
-openaidy service uninstall
+aidy service uninstall
 ```
 
 #### `service status`
 
-Show whether the service is installed, enabled and running (`systemctl status openaidy`).
+Show whether the service is installed, enabled and running (`systemctl status aidy`).
 
 ```bash
-openaidy service status
+aidy service status
 ```
 
 ---
@@ -766,64 +766,64 @@ openaidy service status
 ### Global Help
 
 ```bash
-openaidy --help
-openaidy help
+aidy --help
+aidy help
 ```
 
 ### Group Help
 
 ```bash
-openaidy admin --help
-openaidy tokens --help
-openaidy devices --help
+aidy admin --help
+aidy tokens --help
+aidy devices --help
 ```
 
 ### Command Help
 
 ```bash
-openaidy admin token show --help
-openaidy tokens list --help
-openaidy tokens create --help
-openaidy tokens revoke --help
-openaidy devices list --help
-openaidy devices approve --help
-openaidy devices deny --help
+aidy admin token show --help
+aidy tokens list --help
+aidy tokens create --help
+aidy tokens revoke --help
+aidy devices list --help
+aidy devices approve --help
+aidy devices deny --help
 ```
 
 ## Environment Variables
 
 The CLI reads configuration from environment variables (compatible with the server's `.env` file):
 
-| Variable                     | Default                                      | Description                                                  |
-| ---------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
-| `OPENAIDY_SERVER_URL`        | `http://localhost:3001`                      | HTTP base URL for REST API calls (used by `tokens` commands) |
-| `OPENAIDY_WS_URL`            | `ws://localhost:3001/ws`                     | WebSocket URL (used by `devices` commands)                   |
-| `BOOTSTRAP_ADMIN_TOKEN_PATH` | `.openaidy/credentials/bootstrap-admin.json` | Path to the admin token file                                 |
-| `PORT`                       | `3001`                                       | Fallback for deriving `OPENAIDY_SERVER_URL`                  |
-| `WS_PORT`                    | `3001`                                       | Fallback for deriving `OPENAIDY_WS_URL`                      |
-| `WS_PATH`                    | `/ws`                                        | WebSocket path suffix                                        |
+| Variable                     | Default                                  | Description                                                  |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| `AIDY_SERVER_URL`            | `http://localhost:3001`                  | HTTP base URL for REST API calls (used by `tokens` commands) |
+| `AIDY_WS_URL`                | `ws://localhost:3001/ws`                 | WebSocket URL (used by `devices` commands)                   |
+| `BOOTSTRAP_ADMIN_TOKEN_PATH` | `.aidy/credentials/bootstrap-admin.json` | Path to the admin token file                                 |
+| `PORT`                       | `3001`                                   | Fallback for deriving `AIDY_SERVER_URL`                      |
+| `WS_PORT`                    | `3001`                                   | Fallback for deriving `AIDY_WS_URL`                          |
+| `WS_PATH`                    | `/ws`                                    | WebSocket path suffix                                        |
 
 ### `addon` - Addon Development Tools
 
-Commands for creating, building, testing, and publishing OpenAidy addons.
+Commands for creating, building, testing, and publishing Aidy addons.
 
 ---
 
 #### `addon install`
 
-Register a built addon with the local OpenAidy server. Run from inside your addon directory after building.
+Register a built addon with the local Aidy server. Run from inside your addon directory after building.
 
 **Usage:**
 
 ```bash
-openaidy addon install [--server-url <url>] [--token <token>]
+aidy addon install [--server-url <url>] [--token <token>]
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy addon install
-pnpm openaidy addon install --server-url http://localhost:3001
+pnpm aidy addon install
+pnpm aidy addon install --server-url http://localhost:3001
 ```
 
 ---
@@ -835,14 +835,14 @@ Create a new addon project from a template.
 **Usage:**
 
 ```bash
-openaidy addon create <name> [--template <template>] [--directory <dir>] [--no-git] [--no-install]
+aidy addon create <name> [--template <template>] [--directory <dir>] [--no-git] [--no-install]
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy addon create my-addon
-pnpm openaidy addon create my-addon --template agent
+pnpm aidy addon create my-addon
+pnpm aidy addon create my-addon --template agent
 ```
 
 ---
@@ -860,14 +860,14 @@ Validate addon package and manifest.
 **Usage:**
 
 ```bash
-openaidy addon validate [--package] [--verbose] [--strict]
+aidy addon validate [--package] [--verbose] [--strict]
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy addon validate
-pnpm openaidy addon validate --verbose
+pnpm aidy addon validate
+pnpm aidy addon validate --verbose
 ```
 
 ---
@@ -879,13 +879,13 @@ List available addon project templates.
 **Usage:**
 
 ```bash
-openaidy addon templates
+aidy addon templates
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy addon templates
+pnpm aidy addon templates
 ```
 
 ---
@@ -903,13 +903,13 @@ List all configured agents.
 **Usage:**
 
 ```bash
-openaidy agents list
+aidy agents list
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy agents list
+pnpm aidy agents list
 ```
 
 ---
@@ -921,15 +921,15 @@ Create a new agent with its own workspace directory.
 **Usage:**
 
 ```bash
-openaidy agents create [<name>] [--id <id>] [--description <desc>]
+aidy agents create [<name>] [--id <id>] [--description <desc>]
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy agents create
-pnpm openaidy agents create "Research Assistant"
-pnpm openaidy agents create --name "Research Assistant" --description "Helps with research"
+pnpm aidy agents create
+pnpm aidy agents create "Research Assistant"
+pnpm aidy agents create --name "Research Assistant" --description "Helps with research"
 ```
 
 ---
@@ -941,14 +941,14 @@ Delete an agent from the configuration. Requires typing the agent ID to confirm.
 **Usage:**
 
 ```bash
-openaidy agents delete [<id>]
+aidy agents delete [<id>]
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy agents delete
-pnpm openaidy agents delete my-agent
+pnpm aidy agents delete
+pnpm aidy agents delete my-agent
 ```
 
 **Exit Codes:** `0` success or cancelled, `1` error or confirmation mismatch
@@ -968,7 +968,7 @@ List all tasks, optionally filtered by status.
 **Usage:**
 
 ```bash
-openaidy tasks list [--status <status>] [--limit <n>]
+aidy tasks list [--status <status>] [--limit <n>]
 ```
 
 **Options:**
@@ -981,9 +981,9 @@ openaidy tasks list [--status <status>] [--limit <n>]
 **Examples:**
 
 ```bash
-pnpm openaidy tasks list
-pnpm openaidy tasks list --status in_progress
-pnpm openaidy tasks list --limit 10
+pnpm aidy tasks list
+pnpm aidy tasks list --status in_progress
+pnpm aidy tasks list --limit 10
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` invalid arguments
@@ -997,7 +997,7 @@ Get full details for a specific task.
 **Usage:**
 
 ```bash
-openaidy tasks get <id>
+aidy tasks get <id>
 ```
 
 **Arguments:**
@@ -1009,7 +1009,7 @@ openaidy tasks get <id>
 **Examples:**
 
 ```bash
-pnpm openaidy tasks get abc123
+pnpm aidy tasks get abc123
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` missing task ID
@@ -1023,7 +1023,7 @@ Create a new task.
 **Usage:**
 
 ```bash
-openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]
+aidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]
 ```
 
 **Arguments:**
@@ -1043,9 +1043,9 @@ openaidy tasks create [title] [--description <desc>] [--priority <p>] [--plannin
 **Examples:**
 
 ```bash
-pnpm openaidy tasks create "Fix login bug" --priority high
-pnpm openaidy tasks create --description "Implement the new API endpoint"
-pnpm openaidy tasks create "Plan database migration" --planning
+pnpm aidy tasks create "Fix login bug" --priority high
+pnpm aidy tasks create --description "Implement the new API endpoint"
+pnpm aidy tasks create "Plan database migration" --planning
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` invalid arguments
@@ -1059,7 +1059,7 @@ Update a task's title, description, priority, or status.
 **Usage:**
 
 ```bash
-openaidy tasks update <id> [--title <title>] [--description <desc>] [--priority <p>] [--status <s>]
+aidy tasks update <id> [--title <title>] [--description <desc>] [--priority <p>] [--status <s>]
 ```
 
 **Arguments:**
@@ -1080,9 +1080,9 @@ openaidy tasks update <id> [--title <title>] [--description <desc>] [--priority 
 **Examples:**
 
 ```bash
-pnpm openaidy tasks update abc123 --priority high
-pnpm openaidy tasks update abc123 --status done
-pnpm openaidy tasks update abc123 --title "New title" --priority urgent
+pnpm aidy tasks update abc123 --priority high
+pnpm aidy tasks update abc123 --status done
+pnpm aidy tasks update abc123 --title "New title" --priority urgent
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` invalid arguments
@@ -1096,7 +1096,7 @@ Delete a task permanently.
 **Usage:**
 
 ```bash
-openaidy tasks delete <id>
+aidy tasks delete <id>
 ```
 
 **Arguments:**
@@ -1108,7 +1108,7 @@ openaidy tasks delete <id>
 **Examples:**
 
 ```bash
-pnpm openaidy tasks delete abc123
+pnpm aidy tasks delete abc123
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` missing task ID
@@ -1122,13 +1122,13 @@ Display all tasks grouped by status in Kanban board layout.
 **Usage:**
 
 ```bash
-openaidy tasks kanban
+aidy tasks kanban
 ```
 
 **Examples:**
 
 ```bash
-pnpm openaidy tasks kanban
+pnpm aidy tasks kanban
 ```
 
 **Exit Codes:** `0` success, `1` error
@@ -1148,7 +1148,7 @@ List all subtasks for a specific task.
 **Usage:**
 
 ```bash
-openaidy subtasks list <taskId>
+aidy subtasks list <taskId>
 ```
 
 **Arguments:**
@@ -1160,7 +1160,7 @@ openaidy subtasks list <taskId>
 **Examples:**
 
 ```bash
-pnpm openaidy subtasks list abc123
+pnpm aidy subtasks list abc123
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` missing task ID
@@ -1174,7 +1174,7 @@ Mark a subtask as completed.
 **Usage:**
 
 ```bash
-openaidy subtasks complete <subtaskId> [--result <result>]
+aidy subtasks complete <subtaskId> [--result <result>]
 ```
 
 **Arguments:**
@@ -1192,8 +1192,8 @@ openaidy subtasks complete <subtaskId> [--result <result>]
 **Examples:**
 
 ```bash
-pnpm openaidy subtasks complete abc123
-pnpm openaidy subtasks complete abc123 --result "API endpoint implemented and tested"
+pnpm aidy subtasks complete abc123
+pnpm aidy subtasks complete abc123 --result "API endpoint implemented and tested"
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` missing subtask ID
@@ -1207,7 +1207,7 @@ Mark a subtask as failed.
 **Usage:**
 
 ```bash
-openaidy subtasks fail <subtaskId> [--reason <reason>]
+aidy subtasks fail <subtaskId> [--reason <reason>]
 ```
 
 **Arguments:**
@@ -1225,8 +1225,8 @@ openaidy subtasks fail <subtaskId> [--reason <reason>]
 **Examples:**
 
 ```bash
-pnpm openaidy subtasks fail abc123
-pnpm openaidy subtasks fail abc123 --reason "API rate limit exceeded"
+pnpm aidy subtasks fail abc123
+pnpm aidy subtasks fail abc123 --reason "API rate limit exceeded"
 ```
 
 **Exit Codes:** `0` success, `1` error, `2` missing subtask ID

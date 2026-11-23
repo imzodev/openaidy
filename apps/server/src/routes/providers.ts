@@ -18,13 +18,13 @@ import {
 } from '../providers/oauth/anthropic';
 import { DbOAuthStateStore } from '../providers/oauth/state-store';
 import { env } from '../lib/env.js';
-import type { Message, ModelRequest } from '@openaidy/runtime';
-import type { DatabaseClient } from '@openaidy/db';
+import type { Message, ModelRequest } from '@aidyagent/runtime';
+import type { DatabaseClient } from '@aidyagent/db';
 import type {
   ProviderInfo as ConnectionProviderInfo,
   ConnectProviderResponse,
-} from '@openaidy/shared-types';
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 
 /**
  * Schema for test-invoke request
@@ -187,7 +187,7 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
 
   // The frontend URL the popup window should redirect to after a
   // successful/failed OAuth exchange. Pulled from CORS_ORIGIN (which
-  // is the frontend's dev server URL). OPENAIDY_CORS_ORIGIN is required
+  // is the frontend's dev server URL). AIDY_CORS_ORIGIN is required
   // by env validation, so env.CORS_ORIGIN is always defined — no fallback.
   // (Unused for MiniMax — the callback returns HTML directly — but kept
   // for providers that may need it in future phases.)

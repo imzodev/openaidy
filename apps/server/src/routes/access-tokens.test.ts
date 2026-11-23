@@ -4,13 +4,13 @@ import { fileURLToPath } from 'node:url';
 vi.mock('../lib/env', () => ({
   env: (() => {
     const appConfigPath = fileURLToPath(
-      new URL('../../../.openaidy/test-sessions-config.json', import.meta.url),
+      new URL('../../../.aidy/test-sessions-config.json', import.meta.url),
     );
     const appConfigTemplatePath = fileURLToPath(
-      new URL('../../../../config/openaidy.template.json', import.meta.url),
+      new URL('../../../../config/aidy.template.json', import.meta.url),
     );
     const bootstrapAdminTokenPath = fileURLToPath(
-      new URL('../../../.openaidy/test-bootstrap-admin.json', import.meta.url),
+      new URL('../../../.aidy/test-bootstrap-admin.json', import.meta.url),
     );
     return {
       HOST: '0.0.0.0',
@@ -19,16 +19,14 @@ vi.mock('../lib/env', () => ({
       DB_KIND: 'sqlite',
       DATABASE_URL: undefined,
       SQLITE_PATH: fileURLToPath(
-        new URL('../../../.openaidy/test-access-tokens.db', import.meta.url),
+        new URL('../../../.aidy/test-access-tokens.db', import.meta.url),
       ),
-      OPENAIDY_HOME: fileURLToPath(
-        new URL('../../../.openaidy', import.meta.url),
-      ),
+      AIDY_HOME: fileURLToPath(new URL('../../../.aidy', import.meta.url)),
       APP_CONFIG_PATH: appConfigPath,
       APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
       LOG_LEVEL: 'silent',
       WORKSPACE_BASE_DIR: fileURLToPath(
-        new URL('../../../.openaidy/workspaces', import.meta.url),
+        new URL('../../../.aidy/workspaces', import.meta.url),
       ),
       BOOTSTRAP_ADMIN_ENABLED: true,
       BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapAdminTokenPath,
@@ -55,7 +53,7 @@ vi.mock('../lib/env', () => ({
 
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
-import type { CreateAccessTokenResponse } from '@openaidy/shared-types';
+import type { CreateAccessTokenResponse } from '@aidyagent/shared-types';
 import { rm } from 'node:fs/promises';
 import { AuthMiddleware } from '../websocket/middleware/auth';
 
@@ -78,7 +76,7 @@ async function generateAdminToken(): Promise<string> {
 }
 
 const DB_PATH = fileURLToPath(
-  new URL('../../../.openaidy/test-access-tokens.db', import.meta.url),
+  new URL('../../../.aidy/test-access-tokens.db', import.meta.url),
 );
 
 let app: FastifyInstance;

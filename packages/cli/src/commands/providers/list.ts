@@ -1,7 +1,7 @@
 /**
  * Providers List Command Handler
  *
- * Implements `openaidy providers list` command.
+ * Implements `aidy providers list` command.
  * Uses GET /config API to list configured providers.
  */
 
@@ -9,7 +9,7 @@ import * as p from '@clack/prompts';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 
 interface AppConfig {
   version: number;
@@ -55,7 +55,7 @@ export async function providersListHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy providers list [options]
+      `Usage: aidy providers list [options]
 
 List all available providers and their connection status.
 
@@ -64,8 +64,8 @@ Options:
   --disconnected Show only disconnected providers
 
 Examples:
-  pnpm openaidy providers list
-  pnpm openaidy providers list --connected
+  pnpm aidy providers list
+  pnpm aidy providers list --connected
 
 Exit Codes:
   0  Success

@@ -1,15 +1,15 @@
-# OpenAidy Desktop App — Product Specification
+# Aidy Desktop App — Product Specification
 
 ## Overview
 
-OpenAidy Desktop transforms OpenAidy into a native desktop application with a persistent background service, system tray integration, and OS-native credential management. The desktop app provides full functionality of the CLI and web frontend in a native, installable package.
+Aidy Desktop transforms Aidy into a native desktop application with a persistent background service, system tray integration, and OS-native credential management. The desktop app provides full functionality of the CLI and web frontend in a native, installable package.
 
 ## Target Users
 
 1. **Individual developers** who want a persistent AI assistant running in the background
 2. **Power users** who prefer a native app over a browser tab
 3. **Teams** with a shared self-hosted deployment (desktop as a client to a hosted server)
-4. **Developers** building and testing OpenAidy addons locally
+4. **Developers** building and testing Aidy addons locally
 
 ## User Experience
 
@@ -17,7 +17,7 @@ OpenAidy Desktop transforms OpenAidy into a native desktop application with a pe
 
 ```
 1. User runs the installer (deb/dmg/exe)
-2. App installs, creates config directory (~/.config/openaidy)
+2. App installs, creates config directory (~/.config/aidy)
 3. First-launch wizard:
    a. Welcome screen
    b. API key setup (stored in OS keychain)
@@ -51,14 +51,14 @@ OpenAidy Desktop transforms OpenAidy into a native desktop application with a pe
 
 ### Post-MVP Features (Nice to Have)
 
-| Feature                 | Description                           | Priority |
-| ----------------------- | ------------------------------------- | -------- |
-| **Background Service**  | systemd/LaunchAgent auto-start        | High     |
-| **Fullscreen Mode**     | F11 or button to toggle               | Medium   |
-| **File Associations**   | `.openaidy` project files open in app | Low      |
-| **Auto-update**         | Check for updates on launch           | Medium   |
-| **SQLite Offline Mode** | Fully offline desktop use             | High     |
-| **Code Signing**        | Signed installers for all platforms   | High     |
+| Feature                 | Description                         | Priority |
+| ----------------------- | ----------------------------------- | -------- |
+| **Background Service**  | systemd/LaunchAgent auto-start      | High     |
+| **Fullscreen Mode**     | F11 or button to toggle             | Medium   |
+| **File Associations**   | `.aidy` project files open in app   | Low      |
+| **Auto-update**         | Check for updates on launch         | Medium   |
+| **SQLite Offline Mode** | Fully offline desktop use           | High     |
+| **Code Signing**        | Signed installers for all platforms | High     |
 
 ## UI/UX Specification
 
@@ -95,13 +95,13 @@ The Solid.js SPA fills the entire window. No custom window chrome is added — t
 
 ```
 ┌─────────────────────────┐
-│  🟣 Open OpenAidy       │  ← Shows + focuses window
+│  🟣 Open Aidy       │  ← Shows + focuses window
 │  ─────────────────────  │
 │  🔄 Restart Service     │  ← Restarts the core service
 │  ─────────────────────  │
 │  ⚙️ Settings            │  ← Opens settings in the app
 │  ─────────────────────  │
-│  ❌ Quit OpenAidy       │  ← Quits app + service
+│  ❌ Quit Aidy       │  ← Quits app + service
 └─────────────────────────┘
 ```
 
@@ -129,7 +129,7 @@ Accessible from the app's settings page (no separate desktop settings):
 | Theme              | Light/dark (follows OS) | Config file |
 | Service Auto-start | Run on login            | OS service  |
 | Notifications      | Enable/disable          | Config file |
-| Data Location      | `~/.config/openaidy`    | Config      |
+| Data Location      | `~/.config/aidy`        | Config      |
 
 ### Visual Design
 
@@ -137,7 +137,7 @@ Accessible from the app's settings page (no separate desktop settings):
 - **Window chrome:** OS native (no custom title bar)
 - **Font:** System font stack (`-apple-system`, `BlinkMacSystemFont`, `Segoe UI`)
 - **Icons:** Existing Bootstrap Icons from `apps/web`
-- **Tray icon:** Simple openaidy logo, single color (template on macOS)
+- **Tray icon:** Simple aidy logo, single color (template on macOS)
 
 ## User Flows
 
@@ -156,7 +156,7 @@ User enters API keys (stored in keychain)
 App connects to core service → Shows agent list
     │
     ▼
-User starts using OpenAidy normally
+User starts using Aidy normally
 ```
 
 ### Flow 2: Returning User (App Already Configured)
@@ -225,5 +225,5 @@ User can manually restart via tray menu or app UI
 | Auto-update mechanism | Tauri's built-in updater or manual                    |
 | Full offline mode     | Swap Postgres for SQLite (document path)              |
 | Default plugins       | Ship with pre-installed addons?                       |
-| Multiple workspaces   | Support per-project `openaidy.yaml` from tray         |
+| Multiple workspaces   | Support per-project `aidy.yaml` from tray             |
 | Mobile companion      | (Future) iOS/Android app connecting to same service   |

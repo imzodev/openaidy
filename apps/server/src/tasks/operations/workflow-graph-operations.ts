@@ -1,12 +1,12 @@
-import type { SubtasksRepository, TasksRepository } from '@openaidy/db';
-import type { ConditionOperator, SubtaskKind } from '@openaidy/shared-types';
+import type { SubtasksRepository, TasksRepository } from '@aidyagent/db';
+import type { ConditionOperator, SubtaskKind } from '@aidyagent/shared-types';
 import {
   newGraphErrors,
   validateWorkflowGraph,
   type WorkflowGraph,
   type WorkflowGraphCheck,
   type WorkflowGraphIssue,
-} from '@openaidy/workflow-templates';
+} from '@aidyagent/workflow-templates';
 import type { AgentRegistry } from '../../agents';
 import type { createLogger } from '../../lib/logger';
 import type { ServiceResult } from '../../types';

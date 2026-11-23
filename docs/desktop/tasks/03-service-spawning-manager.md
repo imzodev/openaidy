@@ -7,7 +7,7 @@ Build a robust, production-ready service spawning system with restart logic, hea
 ## Success Criteria
 
 1. Server subprocess restarts automatically on crash (up to 3 retries with exponential backoff)
-2. Port file (`~/.config/openaidy/port`) is always current
+2. Port file (`~/.config/aidy/port`) is always current
 3. Startup waits until server is confirmed healthy (TCP connect check)
 4. Shutdown is graceful — SIGTERM, then SIGKILL after 10s timeout
 5. All subprocess I/O (stdout/stderr) is captured and logged
@@ -111,7 +111,7 @@ pub struct ServiceStatus {
     pub port: Option<u16>,
     pub restart_attempts: u32,
     pub pid: Option<u32>,
-    pub openaidy_home: PathBuf,
+    pub aidy_home: PathBuf,
 }
 
 /// Thread-safe service manager
@@ -120,17 +120,17 @@ pub struct ServiceManager {
     child: Mutex<Option<Child>>,
     port: RwLock<Option<u16>>,
     restart_attempts: RwLock<u32>,
-    openaidy_home: PathBuf,
+    aidy_home: PathBuf,
 }
 
 impl ServiceManager {
-    pub fn new(openaidy_home: PathBuf) -> Self {
+    pub fn new(aidy_home: PathBuf) -> Self {
         Self {
             state: RwLock::const_new(ServiceState::Idle),
             child: Mutex::const_new(None),
             port: RwLock::const_new(None),
             restart_attempts: RwLock::const_new(0),
-            openaidy_home,
+            aidy_home,
         }
     }
 
@@ -147,7 +147,7 @@ impl ServiceManager {
             port,
             restart_attempts,
             pid,
-            openaidy_home: self.openaidy_home.clone(),
+            aidy_home: self.aidy_home.clone(),
         }
     }
 
@@ -177,7 +177,7 @@ impl ServiceManager {
 
         // Spawn background monitor
         let manager = Arc::new(self.clone_manager());
-        let home = self.openaidy_home.clone();
+        let home = self.aidy_home.clone();
         let creds = keychain_creds.clone();
         tokio::spawn(async move {
             manager.monitor_loop(creds).await;
@@ -199,17 +199,17 @@ impl ServiceManager {
         use std::env;
 
         let port = pick_free_port().map_err(|e| e.to_string())?;
-        let (program, args, cwd) = locate_server_entry(&self.openaidy_home);
+        let (program, args, cwd) = locate_server_entry(&self.aidy_home);
 
         // Build env
         let mut vars: Vec<(String, String)> = env::vars().collect();
         let additions = [
             ("PORT".to_string(), port.to_string()),
-            ("OPENAIDY_HOME".to_string(), self.openaidy_home.to_string_lossy().to_string()),
+            ("AIDY_HOME".to_string(), self.aidy_home.to_string_lossy().to_string()),
             ("WS_PORT".to_string(), port.to_string()),
             ("CORS_ORIGIN".to_string(), "app://0.0.0.0".to_string()),
             ("DB_KIND".to_string(), "sqlite".to_string()),
-            ("SQLITE_PATH".to_string(), self.openaidy_home.join("openaidy.db").to_string_lossy().to_string()),
+            ("SQLITE_PATH".to_string(), self.aidy_home.join("aidy.db").to_string_lossy().to_string()),
         ];
         for (k, v) in additions {
             if let Some(existing) = vars.iter_mut().find(|(key, _)| key == &k) {
@@ -262,7 +262,7 @@ impl ServiceManager {
                 .is_ok()
             {
                 // Write port file
-                write_port_file(&self.openaidy_home, port_copy)?;
+                write_port_file(&self.aidy_home, port_copy)?;
                 info!("Server confirmed on port {}", port_copy);
 
                 {
@@ -389,7 +389,7 @@ impl ServiceManager {
         }
 
         // Remove port file
-        let port_file = self.openaidy_home.join("port");
+        let port_file = self.aidy_home.join("port");
         let _ = std::fs::remove_file(&port_file);
 
         let mut s = self.state.write().await;
@@ -404,7 +404,7 @@ impl ServiceManager {
             child: Mutex::const_new(None),
             port: RwLock::const_new(None),
             restart_attempts: RwLock::const_new(0),
-            openaidy_home: self.openaidy_home.clone(),
+            aidy_home: self.aidy_home.clone(),
         })) as *const ServiceManager) }
     }
 }
@@ -460,11 +460,11 @@ pub async fn stop_service(state: State<'_, AppState>) -> Result<(), String> {
 use crate::service::ServiceManager;
 use crate::commands::AppState;
 
-let openaidy_home = dirs::config_dir()
+let aidy_home = dirs::config_dir()
     .unwrap_or_else(|| PathBuf::from("."))
-    .join("openaidy");
+    .join("aidy");
 
-let service_manager = Arc::new(ServiceManager::new(openaidy_home.clone()));
+let service_manager = Arc::new(ServiceManager::new(aidy_home.clone()));
 
 // Load keychain and start
 let keychain_creds = keychain::get_all_credentials().await.unwrap_or_default();

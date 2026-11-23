@@ -1,19 +1,19 @@
 /**
  * In-app self-update contract (issue #456).
  *
- * The server can update a self-hosted, globally-installed OpenAidy
- * (`npm i -g @openaidy/app`) from the UI: it queries the npm registry for the
- * latest version, runs `npm install -g @openaidy/app@latest`, then restarts
- * itself via the `openaidy` CLI. Types here are the shared server/web contract.
+ * The server can update a self-hosted, globally-installed Aidy
+ * (`npm i -g @aidyagent/app`) from the UI: it queries the npm registry for the
+ * latest version, runs `npm install -g @aidyagent/app@latest`, then restarts
+ * itself via the `aidy` CLI. Types here are the shared server/web contract.
  */
 
 /**
  * Lifecycle of an update run, tracked in-memory on the server.
  *
  *  - `idle`       — no update in progress (fresh boot / after a completed one).
- *  - `installing` — `npm install -g @openaidy/app@latest` is running.
+ *  - `installing` — `npm install -g @aidyagent/app@latest` is running.
  *  - `restarting` — install succeeded; the server is handing off to a detached
- *                   `openaidy restart` and is about to go down.
+ *                   `aidy restart` and is about to go down.
  *  - `error`      — the install (or restart hand-off) failed; the server stays
  *                   up on the current version and `error` explains why.
  *
@@ -34,7 +34,7 @@ export interface UpdateCheckResult {
   updateAvailable: boolean;
   /**
    * Whether this deployment can update itself in-place. Only a packaged global
-   * install (`@openaidy/app`) can; a from-source / dev run cannot, and the UI
+   * install (`@aidyagent/app`) can; a from-source / dev run cannot, and the UI
    * should guide the user to update manually instead of offering the button.
    */
   canSelfUpdate: boolean;

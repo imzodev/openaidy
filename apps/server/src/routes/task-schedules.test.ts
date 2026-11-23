@@ -7,7 +7,7 @@ import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   TaskExecutionHistoryStatus,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 const mockAuthMiddleware = {
   validateToken: async () => ({

@@ -25,7 +25,7 @@ apps/server/data/
 # on a fresh checkout that's never run `tauri build`/the deploy step.
 apps/desktop/src-tauri/server-bundle/*
 !apps/desktop/src-tauri/server-bundle/.gitkeep
-.openaidy/
+.aidy/
 *.tsbuildinfo
 # gentle-ai
 .codeium/

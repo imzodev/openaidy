@@ -22,7 +22,7 @@ import {
   WS_ERROR_CODES,
   type WSMessage,
   type PresenceUpdateRequest,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mocks

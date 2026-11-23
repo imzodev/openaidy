@@ -1,4 +1,4 @@
-import type { WorkflowTemplate } from '@openaidy/shared-types';
+import type { WorkflowTemplate } from '@aidyagent/shared-types';
 import {
   agentInput,
   businessInput,
@@ -52,7 +52,7 @@ export const socialPostApprovalTemplate: WorkflowTemplate = {
     channel: '{{channel}}',
     match: { type: 'starts_with', value: '{{keyword}}' },
     replyWithResult: true,
-    ackText: 'Drafting it — approve it in OpenAidy when it’s ready.',
+    ackText: 'Drafting it — approve it in Aidy when it’s ready.',
   },
   nodes: [
     {

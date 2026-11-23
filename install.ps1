@@ -1,12 +1,12 @@
 ﻿# ============================================================================
-# OpenAidy Installer for Windows
+# Aidy Installer for Windows
 # ============================================================================
-# Installs OpenAidy from the prebuilt npm package (@openaidy/app). No git
+# Installs Aidy from the prebuilt npm package (@aidyagent/app). No git
 # clone, no source build — just Node + ripgrep + uv + git, then `npm install
 # -g`.
 #
 # Usage:
-#   iex (irm https://openaidy.com/install.ps1)
+#   iex (irm https://aidyagent.app/install.ps1)
 #
 # Or download and run with options:
 #   .\install.ps1 -Version 0.2.1
@@ -14,10 +14,10 @@
 # ============================================================================
 
 param(
-    # Specific @openaidy/app version to install; empty = latest.
+    # Specific @aidyagent/app version to install; empty = latest.
     [string]$Version = "",
     # Tools directory (managed Node + ripgrep).
-    [string]$InstallDir = "$env:LOCALAPPDATA\openaidy"
+    [string]$InstallDir = "$env:LOCALAPPDATA\aidy"
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,26 +28,26 @@ try {
 } catch { }
 
 # Data root (config, state, credentials, logs). Matches the CLI's default
-# (os.homedir()/.openaidy) so a later `openaidy` invocation with no env finds
+# (os.homedir()/.aidy) so a later `aidy` invocation with no env finds
 # the same home.
-$script:DataHome = "$env:USERPROFILE\.openaidy"
+$script:DataHome = "$env:USERPROFILE\.aidy"
 
 # Node version to provision. Must be >= 22.13 so Node's built-in `node:sqlite`
-# (OpenAidy's SQLite driver) is available without the --experimental-sqlite flag.
+# (Aidy's SQLite driver) is available without the --experimental-sqlite flag.
 $script:NodeVersion = "22.23.1"
 
 # ============================================================================
 # Helpers
 # ============================================================================
 
-function Log-Info    { param([string]$Message) Write-Host "[openaidy] $Message" -ForegroundColor Cyan }
-function Log-Success { param([string]$Message) Write-Host "[openaidy] ✓ $Message" -ForegroundColor Green }
-function Log-Warn    { param([string]$Message) Write-Host "[openaidy] ⚠ $Message" -ForegroundColor Yellow }
-function Log-Error   { param([string]$Message) Write-Host "[openaidy] ✗ $Message" -ForegroundColor Red }
+function Log-Info    { param([string]$Message) Write-Host "[aidy] $Message" -ForegroundColor Cyan }
+function Log-Success { param([string]$Message) Write-Host "[aidy] ✓ $Message" -ForegroundColor Green }
+function Log-Warn    { param([string]$Message) Write-Host "[aidy] ⚠ $Message" -ForegroundColor Yellow }
+function Log-Error   { param([string]$Message) Write-Host "[aidy] ✗ $Message" -ForegroundColor Red }
 
 function New-TempFile {
     $tmp = [System.IO.Path]::GetTempPath()
-    return Join-Path $tmp "openaidy-install-$(Get-Random).tmp"
+    return Join-Path $tmp "aidy-install-$(Get-Random).tmp"
 }
 
 # ============================================================================
@@ -68,7 +68,7 @@ function Install-Node {
 
     try {
         Log-Info "Downloading Node.js..."
-        Invoke-WebRequest -Uri $url -OutFile $zipPath -UserAgent "OpenAidy/1.0" -TimeoutSec 120
+        Invoke-WebRequest -Uri $url -OutFile $zipPath -UserAgent "Aidy/1.0" -TimeoutSec 120
 
         if (Test-Path $nodePath) { Remove-Item $nodePath -Recurse -Force }
         New-Item -ItemType Directory -Path $nodePath -Force | Out-Null
@@ -107,7 +107,7 @@ function Install-Node {
     return $false
 }
 
-# OpenAidy's SQLite layer uses Node's built-in `node:sqlite`, available without
+# Aidy's SQLite layer uses Node's built-in `node:sqlite`, available without
 # a flag only on Node >= 22.13. A too-old system Node returns $false here so a
 # managed copy is provisioned instead.
 function Test-Node {
@@ -173,7 +173,7 @@ function Install-Ripgrep {
     $arch = $env:PROCESSOR_ARCHITECTURE
     $rgArch = if ($arch -eq "ARM64") { "aarch64-pc-windows-msvc" } else { "x86_64-pc-windows-msvc" }
     try {
-        $tag = Invoke-RestMethod -Uri "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" -Headers @{ "User-Agent" = "OpenAidy/1.0" } -TimeoutSec 30
+        $tag = Invoke-RestMethod -Uri "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" -Headers @{ "User-Agent" = "Aidy/1.0" } -TimeoutSec 30
         $version = $tag.tag_name
         if (-not $version) { throw "tag_name missing from API response" }
     } catch {
@@ -187,13 +187,13 @@ function Install-Ripgrep {
 
     try {
         Log-Info "Downloading ripgrep from $url ..."
-        Invoke-WebRequest -Uri $url -OutFile $zipPath -UserAgent "OpenAidy/1.0" -TimeoutSec 90
+        Invoke-WebRequest -Uri $url -OutFile $zipPath -UserAgent "Aidy/1.0" -TimeoutSec 90
 
         if (-not (Test-Path $binDir)) {
             New-Item -ItemType Directory -Path $binDir -Force | Out-Null
         }
 
-        $expandDir = Join-Path ([System.IO.Path]::GetTempPath()) ("openaidy-rg-" + [Guid]::NewGuid().ToString("N"))
+        $expandDir = Join-Path ([System.IO.Path]::GetTempPath()) ("aidy-rg-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Path $expandDir -Force | Out-Null
         Expand-Archive -Path $zipPath -DestinationPath $expandDir -Force
 
@@ -283,7 +283,7 @@ function Install-Uv {
         return $false
     }
 
-    # Persist so a later `openaidy start` from a fresh terminal still finds uvx
+    # Persist so a later `aidy start` from a fresh terminal still finds uvx
     # when it spawns an MCP server (ripgrep lives in this dir too).
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($userPath -notlike "*$binDir*") {
@@ -294,7 +294,7 @@ function Install-Uv {
 }
 
 function Test-Uv {
-    # Honor an OpenAidy-managed install from a previous run.
+    # Honor an Aidy-managed install from a previous run.
     $binDir = Join-Path $InstallDir "bin"
     if (Test-Path (Join-Path $binDir "uvx.exe")) {
         $env:PATH = "$binDir;$env:PATH"
@@ -386,13 +386,13 @@ function Test-Git {
 }
 
 # ============================================================================
-# OpenAidy CLI (prebuilt npm package)
+# Aidy CLI (prebuilt npm package)
 # ============================================================================
 
-function Install-OpenAidy {
-    $spec = "@openaidy/app"
+function Install-Aidy {
+    $spec = "@aidyagent/app"
     if (-not [string]::IsNullOrWhiteSpace($Version)) {
-        $spec = "@openaidy/app@" + ($Version -replace '^v', '')
+        $spec = "@aidyagent/app@" + ($Version -replace '^v', '')
     }
     Log-Info "Installing $spec from npm..."
 
@@ -402,21 +402,21 @@ function Install-OpenAidy {
         exit 1
     }
 
-    # Locate the installed `openaidy` bin (npm places .cmd shims in the global
+    # Locate the installed `aidy` bin (npm places .cmd shims in the global
     # prefix root on Windows) and make sure that dir is on the user PATH.
     $npmPrefix = ""
     try { $npmPrefix = (& npm prefix -g).Trim() } catch { }
     $cmd = ""
-    if ($npmPrefix -and (Test-Path (Join-Path $npmPrefix "openaidy.cmd"))) {
-        $cmd = Join-Path $npmPrefix "openaidy.cmd"
+    if ($npmPrefix -and (Test-Path (Join-Path $npmPrefix "aidy.cmd"))) {
+        $cmd = Join-Path $npmPrefix "aidy.cmd"
         $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
         if ($userPath -notlike "*$npmPrefix*") {
             [Environment]::SetEnvironmentVariable("Path", "$npmPrefix;$userPath", "User")
         }
         $env:PATH = "$npmPrefix;$env:PATH"
     }
-    $script:OpenAidyCmd = $cmd
-    Log-Success "openaidy installed ($spec)"
+    $script:AidyCmd = $cmd
+    Log-Success "aidy installed ($spec)"
 }
 
 # ============================================================================
@@ -472,13 +472,13 @@ function Invoke-Init {
     Log-Info "Generating bootstrap admin token..."
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $script:OpenAidyCmd
+    $psi.FileName = $script:AidyCmd
     $psi.Arguments = "init"
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
-    $psi.EnvironmentVariables["OPENAIDY_HOME"] = $script:DataHome
+    $psi.EnvironmentVariables["AIDY_HOME"] = $script:DataHome
     $psi.EnvironmentVariables["WS_TOKEN_SECRET"] = $script:JwtSecret
     $psi.EnvironmentVariables["PATH"] = "$InstallDir\bin;$InstallDir\node;$env:PATH"
 
@@ -488,14 +488,14 @@ function Invoke-Init {
     $proc.WaitForExit()
 
     if ($proc.ExitCode -ne 0) {
-        Log-Error "openaidy init failed (exit $($proc.ExitCode))"
+        Log-Error "aidy init failed (exit $($proc.ExitCode))"
         if ($stderr) { Write-Host $stderr }
         exit 1
     }
 
     $match = [regex]::Match($stdout, '(?m)^Bootstrap admin token:\s+(.+?)\s*$')
     if (-not $match.Success) {
-        Log-Error "openaidy init succeeded but no token line was printed"
+        Log-Error "aidy init succeeded but no token line was printed"
         Write-Host $stdout
         exit 1
     }
@@ -507,7 +507,7 @@ function Invoke-Init {
 # ============================================================================
 
 Write-Host ""
-Write-Host "OpenAidy Installer" -ForegroundColor White
+Write-Host "Aidy Installer" -ForegroundColor White
 Write-Host ""
 
 Log-Info "Tools directory: $InstallDir"
@@ -538,22 +538,22 @@ if (-not (Test-Git)) {
     exit 1
 }
 
-# OpenAidy CLI (prebuilt package)
-Install-OpenAidy
-if ([string]::IsNullOrWhiteSpace($script:OpenAidyCmd)) {
-    Log-Error "openaidy was installed but its command could not be located on PATH."
-    Log-Error "Open a new terminal and run 'openaidy start'."
+# Aidy CLI (prebuilt package)
+Install-Aidy
+if ([string]::IsNullOrWhiteSpace($script:AidyCmd)) {
+    Log-Error "aidy was installed but its command could not be located on PATH."
+    Log-Error "Open a new terminal and run 'aidy start'."
     exit 1
 }
 
 # Ensure JWT secret + generate bootstrap-admin token (idempotent).
 $script:JwtSecret = Get-JwtSecret
-$env:OPENAIDY_HOME = $script:DataHome
+$env:AIDY_HOME = $script:DataHome
 $env:WS_TOKEN_SECRET = $script:JwtSecret
 $BootstrapToken = Invoke-Init
 
 # Start the server and open the browser. The packaged server serves the web UI
-# itself on one port, so plain `openaidy start` needs no flags (no Vite).
+# itself on one port, so plain `aidy start` needs no flags (no Vite).
 #
 # We must NOT use `2>&1`: under $ErrorActionPreference='Stop', PowerShell 5.1
 # turns any stderr line from the native command into a terminating
@@ -565,8 +565,8 @@ Log-Info "Starting the server (this may take up to 30 seconds)..."
 $StartOutput = ""
 $StartExit = 1
 try {
-    $env:OPENAIDY_HOME = $script:DataHome
-    $StartOutput = & $script:OpenAidyCmd start
+    $env:AIDY_HOME = $script:DataHome
+    $StartOutput = & $script:AidyCmd start
     $StartExit = $LASTEXITCODE
 } catch {
     $StartExit = 1
@@ -581,7 +581,7 @@ if ($StartExit -eq 0) {
 }
 
 Write-Host ""
-Log-Success "OpenAidy is installed."
+Log-Success "Aidy is installed."
 Write-Host ""
 Write-Host "Bootstrap admin token: $BootstrapToken"
 Write-Host ""
@@ -600,11 +600,11 @@ if ($StartUrl) {
         Write-Host "Open $AuthUrl in your browser."
     }
     Write-Host ""
-    Write-Host "Use 'openaidy stop' to stop the server."
+    Write-Host "Use 'aidy stop' to stop the server."
 } else {
     $EncodedToken = [uri]::EscapeDataString($BootstrapToken)
     $AuthUrl = "http://localhost:3001/?token=${EncodedToken}"
-    Write-Host "Open a new terminal and run 'openaidy start' to bring the server online,"
+    Write-Host "Open a new terminal and run 'aidy start' to bring the server online,"
     Write-Host "then open $AuthUrl in your browser."
     Write-Host ""
     Write-Host "If it still doesn't start, check the log at:"

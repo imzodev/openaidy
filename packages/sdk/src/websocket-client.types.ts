@@ -13,7 +13,7 @@ import type {
   ProviderListResponse,
   PresenceStatus,
   ClientType,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Client Options

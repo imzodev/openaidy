@@ -1,8 +1,8 @@
 /**
- * openaidy stop — Stop the OpenAidy server and web frontend (PR2 T2.3)
+ * aidy stop — Stop the Aidy server and web frontend (PR2 T2.3)
  *
  * Behavior (per spec R-8):
- *  1. Read PID JSON from $OPENAIDY_HOME/state/server.pid
+ *  1. Read PID JSON from $AIDY_HOME/state/server.pid
  *  2. If process is dead, remove stale PID file, report cleanup
  *  3. If alive, send SIGTERM (Unix) or taskkill (Windows)
  *  4. Poll every 500ms for up to 10s for process exit
@@ -39,9 +39,9 @@ const STOP_POLL_MS = 500;
 const STOP_MAX_POLLS = 20; // 10 seconds
 
 const HELP_TEXT = `
-Usage: openaidy stop [options]
+Usage: aidy stop [options]
 
-Stop the OpenAidy server and web frontend.
+Stop the Aidy server and web frontend.
 
 Gracefully shuts down processes by:
   - Reading PID files
@@ -49,7 +49,7 @@ Gracefully shuts down processes by:
   - Waiting up to 10 seconds for clean shutdown
   - Escalating to SIGKILL if needed
 
-When the OpenAidy service is installed (\`openaidy service install\`),
+When the Aidy service is installed (\`aidy service install\`),
 this stops it through systemctl (it stays stopped until started again).
 
 Options:
@@ -135,22 +135,21 @@ export async function stopHandler(args: string[]): Promise<CommandResult> {
   // --server-only: stop only the server, leave the web frontend running
   const serverOnly = args.includes('--server-only');
 
-  // Default to ~/.openaidy so a globally-installed `openaidy` finds the running
+  // Default to ~/.aidy so a globally-installed `aidy` finds the running
   // server's PID file without any env setup.
-  const openaidyHome =
-    process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
+  const aidyHome = process.env.AIDY_HOME || resolve(homedir(), '.aidy');
 
   const lines: string[] = [];
   let hadError = false;
 
   // Stop the server
-  const serverResult = await stopServer(openaidyHome);
+  const serverResult = await stopServer(aidyHome);
   lines.push(serverResult.message);
   if (serverResult.error) hadError = true;
 
   // Stop the web frontend (unless --server-only)
   if (!serverOnly) {
-    const webResult = await stopWeb(openaidyHome);
+    const webResult = await stopWeb(aidyHome);
     lines.push(webResult.message);
     if (webResult.error) hadError = true;
   }
@@ -162,9 +161,9 @@ export async function stopHandler(args: string[]): Promise<CommandResult> {
 }
 
 async function stopServer(
-  openaidyHome: string,
+  aidyHome: string,
 ): Promise<{ message: string; error: boolean }> {
-  const pidFilePath = resolve(openaidyHome, 'state/server.pid');
+  const pidFilePath = resolve(aidyHome, 'state/server.pid');
   const rec = await readPidFile(pidFilePath);
 
   if (!rec) {
@@ -193,9 +192,9 @@ async function stopServer(
 }
 
 async function stopWeb(
-  openaidyHome: string,
+  aidyHome: string,
 ): Promise<{ message: string; error: boolean }> {
-  const webPidPath = resolve(openaidyHome, 'state/web.pid');
+  const webPidPath = resolve(aidyHome, 'state/web.pid');
   const rec = await readWebPidFile(webPidPath);
 
   if (!rec) {

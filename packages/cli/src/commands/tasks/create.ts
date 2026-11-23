@@ -1,14 +1,14 @@
 /**
  * Tasks Create Command Handler
  *
- * Implements `openaidy tasks create` command.
+ * Implements `aidy tasks create` command.
  */
 
 import * as p from '@clack/prompts';
 import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import type { CommandResult } from '../../types.js';
-import type { TaskPriority } from '@openaidy/shared-types';
+import type { TaskPriority } from '@aidyagent/shared-types';
 
 const VALID_PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 
@@ -17,7 +17,7 @@ export async function tasksCreateHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]
+      `Usage: aidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]
 
 Create a new task.
 
@@ -30,9 +30,9 @@ Options:
   --planning            Enable planning agent to decompose into subtasks
 
 Examples:
-  pnpm openaidy tasks create "Fix login bug" --priority high
-  pnpm openaidy tasks create --description "Implement the new API endpoint"
-  pnpm openaidy tasks create "Plan database migration" --planning
+  pnpm aidy tasks create "Fix login bug" --priority high
+  pnpm aidy tasks create --description "Implement the new API endpoint"
+  pnpm aidy tasks create "Plan database migration" --planning
 
 Exit Codes:
   0  Success (task created)
@@ -78,7 +78,7 @@ Exit Codes:
 
   if (!positionalTitle && !description) {
     const msg =
-      'Either a task title or --description is required.\nUsage: openaidy tasks create [title] [--description <desc>]';
+      'Either a task title or --description is required.\nUsage: aidy tasks create [title] [--description <desc>]';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }

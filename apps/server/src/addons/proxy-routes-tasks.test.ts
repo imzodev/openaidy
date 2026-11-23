@@ -20,7 +20,7 @@ import type { FastifyInstance } from 'fastify';
 import { addonProxyRoutes } from './proxy-routes';
 import { AddonService } from './service';
 import type { TaskService } from '../tasks/service';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 const JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
 
@@ -29,7 +29,7 @@ function makeAddonService() {
     repository: null as never,
     validator: null as never,
     jwtSecret: JWT_SECRET,
-    openAidyVersion: '0.0.0',
+    aidyVersion: '0.0.0',
   });
 }
 

@@ -1,7 +1,7 @@
 /**
  * MCP Import Command Handler
  *
- * Implements `openaidy mcp import [file]`.
+ * Implements `aidy mcp import [file]`.
  *
  * Reads a standard MCP config in the keyed-map format (Claude Desktop /
  * VS Code / Cursor) from a file argument or stdin and POSTs it to
@@ -14,9 +14,9 @@ import { readFile } from 'node:fs/promises';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import type { ImportMcpServersRequest } from '@openaidy/shared-types';
+import type { ImportMcpServersRequest } from '@aidyagent/shared-types';
 
-/** Read all of stdin as a UTF-8 string (for `… | openaidy mcp import`). */
+/** Read all of stdin as a UTF-8 string (for `… | aidy mcp import`). */
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -28,7 +28,7 @@ async function readStdin(): Promise<string> {
 export async function mcpImportHandler(args: string[]): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy mcp import [file]
+      `Usage: aidy mcp import [file]
 
 Import one or more MCP servers from a standard config file (or stdin).
 Accepts the keyed-map format used by Claude Desktop, VS Code and Cursor —
@@ -42,8 +42,8 @@ Arguments:
   file    Path to a JSON config file. Omit (or use "-") to read from stdin.
 
 Examples:
-  openaidy mcp import ./mcp.json
-  cat ~/.config/mcp.json | openaidy mcp import
+  aidy mcp import ./mcp.json
+  cat ~/.config/mcp.json | aidy mcp import
 
 Exit Codes:
   0  Servers imported successfully

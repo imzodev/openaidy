@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenAidy",
+  "productName": "Aidy",
   "version": "0.1.0",
-  "identifier": "dev.openaidy",
+  "identifier": "app.aidyagent",
   "build": {
     "frontendDist": "../../web/dist",
     "devUrl": "http://localhost:5173",
@@ -17,7 +17,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenAidy",
+        "title": "Aidy",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
@@ -46,12 +46,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["scripts/openaidy-service.sh", "server-bundle/**/*"],
+    "resources": ["scripts/aidy-service.sh", "server-bundle/**/*"],
     "category": "Productivity",
     "shortDescription": "AI Assistant Desktop App",
-    "longDescription": "OpenAidy is a desktop AI assistant that provides agent management, session handling, and extensible addons.",
+    "longDescription": "Aidy is a desktop AI assistant that provides agent management, session handling, and extensible addons.",
     "copyright": "Copyright © 2024",
-    "publisher": "OpenAidy",
+    "publisher": "Aidy",
     "windows": {
       "nsis": {
         "installMode": "currentUser",
@@ -64,7 +64,7 @@
       "minimumSystemVersion": "10.15",
       "frameworks": [],
       "signingIdentity": "-",
-      "providerShortName": "OpenAidy",
+      "providerShortName": "Aidy",
       "entitlements": "bundle/macos/entitlements.plist"
     },
     "linux": {
@@ -84,7 +84,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/imzodev/openaidy/releases/latest/download/latest.json"
+        "https://github.com/imzodev/aidy/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyNjg3MkVGQUQwMDI2MEIKUldRTEpnQ3Q3M0pvMGtydWVkWmVrc1NVR3RMQmJPam5nODhaWFFuTWhLdWdVMWxjWXN1bnRCVloK"
     }

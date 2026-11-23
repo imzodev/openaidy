@@ -9,7 +9,7 @@ import {
   type ProviderError,
   type ProviderErrorCode,
   type ProviderErrorOptions,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { AnthropicErrorResponse } from './types';
 
 // =====================
@@ -55,7 +55,9 @@ const ANTHROPIC_ERROR_CODE_MAP: Record<string, ProviderErrorCode> = {
 /**
  * Checks if a response is an Anthropic error response
  */
-export function isAnthropicError(response: unknown): response is AnthropicErrorResponse {
+export function isAnthropicError(
+  response: unknown,
+): response is AnthropicErrorResponse {
   return (
     typeof response === 'object' &&
     response !== null &&
@@ -151,7 +153,7 @@ function buildErrorOptions(
   providerId: string | undefined,
   modelId: string | undefined,
   cause: unknown,
-  retryAfterMs?: number
+  retryAfterMs?: number,
 ): ProviderErrorOptions {
   const options: ProviderErrorOptions = { cause };
 
@@ -176,7 +178,7 @@ export function normalizeError(
   options?: {
     providerId?: string;
     modelId?: string;
-  }
+  },
 ): ProviderError {
   const providerId = options?.providerId;
   const modelId = options?.modelId;
@@ -188,7 +190,11 @@ export function normalizeError(
 
     const message = `HTTP ${error.status}: ${error.statusText}`;
 
-    return createProviderError(code, message, buildErrorOptions(providerId, modelId, error, retryAfterMs));
+    return createProviderError(
+      code,
+      message,
+      buildErrorOptions(providerId, modelId, error, retryAfterMs),
+    );
   }
 
   // Handle Anthropic error response
@@ -196,33 +202,55 @@ export function normalizeError(
     const anthropicError = error.error;
 
     // Map error type to provider error code
-    const errorType = anthropicError.type.toLowerCase().replace(/[^a-z_]/g, '_');
+    const errorType = anthropicError.type
+      .toLowerCase()
+      .replace(/[^a-z_]/g, '_');
     const code =
       ANTHROPIC_ERROR_CODE_MAP[errorType] ??
       ANTHROPIC_ERROR_CODE_MAP[anthropicError.type] ??
       'provider.unknown';
 
-    return createProviderError(code, anthropicError.message, buildErrorOptions(providerId, modelId, error));
+    return createProviderError(
+      code,
+      anthropicError.message,
+      buildErrorOptions(providerId, modelId, error),
+    );
   }
 
   // Handle network errors
   if (error instanceof TypeError) {
     // fetch throws TypeError for network errors
     if (error.message.includes('fetch') || error.message.includes('network')) {
-      return createProviderError('provider.unavailable', error.message, buildErrorOptions(providerId, modelId, error));
+      return createProviderError(
+        'provider.unavailable',
+        error.message,
+        buildErrorOptions(providerId, modelId, error),
+      );
     }
   }
 
   // Handle AbortError (timeout)
   if (error instanceof Error && error.name === 'AbortError') {
-    return createProviderError('provider.timeout', 'Request timed out', buildErrorOptions(providerId, modelId, error));
+    return createProviderError(
+      'provider.timeout',
+      'Request timed out',
+      buildErrorOptions(providerId, modelId, error),
+    );
   }
 
   // Handle generic errors
   if (error instanceof Error) {
-    return createProviderError('provider.unknown', error.message, buildErrorOptions(providerId, modelId, error));
+    return createProviderError(
+      'provider.unknown',
+      error.message,
+      buildErrorOptions(providerId, modelId, error),
+    );
   }
 
   // Fallback for unknown error types
-  return createProviderError('provider.unknown', extractErrorMessage(error), buildErrorOptions(providerId, modelId, error));
+  return createProviderError(
+    'provider.unknown',
+    extractErrorMessage(error),
+    buildErrorOptions(providerId, modelId, error),
+  );
 }

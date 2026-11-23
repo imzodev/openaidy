@@ -21,9 +21,9 @@ try {
   process.exit(1);
 }
 
-// Graceful shutdown. The CLI (`openaidy stop` / `openaidy restart`) sends
+// Graceful shutdown. The CLI (`aidy stop` / `aidy restart`) sends
 // SIGTERM to this process; the self-update flow hands off to a detached
-// `openaidy restart` which does the same. Close Fastify (runs onClose hooks:
+// `aidy restart` which does the same. Close Fastify (runs onClose hooks:
 // scheduler stop, DB close, WAL checkpoint) so we don't drop in-flight work or
 // leave a half-flushed database behind. Escalation to SIGKILL after 10s is
 // handled by the CLI stop path, so a hung close can't wedge a restart.

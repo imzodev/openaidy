@@ -3,7 +3,7 @@ import {
   type ModelProvider,
   type ProviderCapability,
   type ProviderError,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { ProviderRegistryService } from './registry';
 import type {
   ProviderSelectionRequest,

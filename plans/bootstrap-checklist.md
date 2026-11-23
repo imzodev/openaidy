@@ -1,12 +1,12 @@
 ---
-summary: 'Short execution checklist for bootstrapping OpenAidy'
+summary: 'Short execution checklist for bootstrapping Aidy'
 read_when:
   - You want a concise checklist version of the bootstrap guide
-  - You are setting up the initial OpenAidy repository and want a practical sequence
-title: 'OpenAidy Bootstrap Checklist'
+  - You are setting up the initial Aidy repository and want a practical sequence
+title: 'Aidy Bootstrap Checklist'
 ---
 
-# OpenAidy Bootstrap Checklist
+# Aidy Bootstrap Checklist
 
 Use this checklist while setting up the first version of the project.
 

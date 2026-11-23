@@ -91,8 +91,8 @@ describe('CLI Extension Points', () => {
     it('CommandMeta supports all required fields', () => {
       const meta: CommandMeta = {
         description: 'Show bootstrap admin token',
-        usage: 'openaidy admin token show',
-        examples: ['pnpm openaidy admin token show'],
+        usage: 'aidy admin token show',
+        examples: ['pnpm aidy admin token show'],
       };
 
       expect(meta.description).toBeDefined();
@@ -126,7 +126,7 @@ describe('CLI Extension Points', () => {
 
   describe('Distribution Readiness', () => {
     it('defaultCLIConfig has required fields', () => {
-      expect(defaultCLIConfig.name).toBe('openaidy');
+      expect(defaultCLIConfig.name).toBe('aidy');
       expect(defaultCLIConfig.version).toMatch(/\d+\.\d+\.\d+/);
       expect(defaultCLIConfig.description).toBeDefined();
     });

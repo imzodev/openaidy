@@ -8,7 +8,7 @@ import {
   createOpenAIProvider,
   createCompatibleProvider,
 } from './adapter';
-import type { ModelRequest } from '@openaidy/runtime';
+import type { ModelRequest } from '@aidyagent/runtime';
 
 // Mock the app logger so we can assert log calls without hitting the real buffer
 const mockLoggerInstance = {

@@ -1,7 +1,7 @@
 ---
-summary: 'How agents work in OpenAidy — dispatch, providers, sessions, and streaming'
+summary: 'How agents work in Aidy — dispatch, providers, sessions, and streaming'
 read_when:
-  - You want to understand how OpenAidy runs AI agents
+  - You want to understand how Aidy runs AI agents
   - You are setting up your first agent or choosing a model provider
   - You want to know how to send messages and get streaming responses
 title: 'Agents'
@@ -9,19 +9,19 @@ title: 'Agents'
 
 # Agents
 
-An agent in OpenAidy is a language model-powered process that runs inside a session. Agents receive messages, produce responses, and can be connected to channels so they reply to real conversations automatically.
+An agent in Aidy is a language model-powered process that runs inside a session. Agents receive messages, produce responses, and can be connected to channels so they reply to real conversations automatically.
 
 ## How agents relate to sessions
 
 Sessions are the conversation container. An agent is the runtime that powers a session.
 
-When you send a message to a session, OpenAidy dispatches an agent run — the agent reads the message history, generates a response, and the response is appended to the transcript.
+When you send a message to a session, Aidy dispatches an agent run — the agent reads the message history, generates a response, and the response is appended to the transcript.
 
 You can have multiple sessions, each using the same or a different agent configuration. The agent is selected per-session or per-dispatch, not globally.
 
 ## Provider adapters
 
-OpenAidy is provider-agnostic. It talks to AI providers through typed adapter contracts, so you can swap models or providers without changing session logic.
+Aidy is provider-agnostic. It talks to AI providers through typed adapter contracts, so you can swap models or providers without changing session logic.
 
 Supported provider patterns:
 
@@ -49,7 +49,7 @@ The API returns immediately. For streaming responses, subscribe to the session's
 
 ## Streaming responses
 
-OpenAidy streams agent output token by token over a WebSocket connection. This lets you display responses as they are generated, just like ChatGPT — it's how the web UI itself renders every reply.
+Aidy streams agent output token by token over a WebSocket connection. This lets you display responses as they are generated, just like ChatGPT — it's how the web UI itself renders every reply.
 
 To receive streaming events:
 
@@ -82,12 +82,12 @@ Each session or dispatch call can specify:
 
 Skills are reusable system-prompt fragments attached to agents. They let you give an agent persistent instructions without modifying the core prompt.
 
-Bundled skills are seeded automatically from `config/skills/` on first startup. Custom skills live in `OPENAIDY_HOME/skills/` and override bundled skills of the same name.
+Bundled skills are seeded automatically from `config/skills/` on first startup. Custom skills live in `AIDY_HOME/skills/` and override bundled skills of the same name.
 
 To create a custom skill, add a directory with a `SKILL.md` file:
 
 ```
-.openaidy/skills/my-skill/SKILL.md
+.aidy/skills/my-skill/SKILL.md
 ```
 
 The file needs YAML frontmatter with `name`, `description`, and `version`, followed by the skill instructions.

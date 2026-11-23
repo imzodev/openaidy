@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import {
   createDatabaseClient,
   ProviderCredentialsRepository,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { DbOAuthStateStore } from './state-store';
 import {
   startAnthropicOAuth,

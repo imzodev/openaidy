@@ -1,4 +1,4 @@
-# OpenAidy Desktop App — Dependencies
+# Aidy Desktop App — Dependencies
 
 Consolidated reference for all dependencies introduced by the desktop app feature.
 
@@ -10,12 +10,12 @@ Consolidated reference for all dependencies introduced by the desktop app featur
 
 ```toml
 [package]
-name = "openaidy-desktop"
+name = "aidy-desktop"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "openaidy_desktop_lib"
+name = "aidy_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -74,7 +74,7 @@ strip = true
 | `serde_json`           | JSON parsing            | Port file, window state                            |
 | `keyring`              | Cross-platform keychain | Store API keys in OS credential manager            |
 | `tokio`                | Async runtime           | Service spawning, process management               |
-| `dirs`                 | Platform directories    | Per-OS app-data dir (e.g. `%APPDATA%/openaidy`)    |
+| `dirs`                 | Platform directories    | Per-OS app-data dir (e.g. `%APPDATA%/aidy`)        |
 | `chrono`               | Date/time               | Checks the bootstrap-admin token's `expiresAt`     |
 | `log` + `env_logger`   | Logging                 | Structured logging in Rust backend                 |
 
@@ -120,7 +120,7 @@ for the linuxdeploy failure surfaces upstream.
 
 ```json
 {
-  "name": "@openaidy/desktop",
+  "name": "@aidyagent/desktop",
   "private": true,
   "type": "module",
   "scripts": {
@@ -273,5 +273,5 @@ On **Windows**, the equivalent is a `.bat` batch script that uses `schtasks` or 
 ## Lock File Strategy
 
 - **Rust:** `apps/desktop/src-tauri/Cargo.lock` is committed. All Rust versions are pinned.
-- **Node:** `pnpm-lock.yaml` in root workspace pins all Node dependencies. `apps/desktop/package.json` references workspace packages (`@openaidy/*`) which inherit from the root lock file.
+- **Node:** `pnpm-lock.yaml` in root workspace pins all Node dependencies. `apps/desktop/package.json` references workspace packages (`@aidyagent/*`) which inherit from the root lock file.
 - **System packages:** Documented in the README for users who need to install them manually.

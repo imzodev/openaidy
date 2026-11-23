@@ -14,7 +14,7 @@ export type HookContext = {
   sessionId?: string;
   /** Provider id */
   providerId?: string;
-  /** Vendor family (maps to vendorFamilySchema in @openaidy/config) */
+  /** Vendor family (maps to vendorFamilySchema in @aidyagent/config) */
   vendorFamily?: 'openai-compatible' | 'anthropic' | 'gemini';
   /** Reasoning/thinking configuration */
   reasoningConfig?: {

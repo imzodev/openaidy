@@ -5,7 +5,7 @@ import type {
   PersonalityFileId,
   PersonalityFileMeta,
   PersonalityFile,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Returns true if the file content is still the unedited default template

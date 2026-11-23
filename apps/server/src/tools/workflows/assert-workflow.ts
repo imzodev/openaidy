@@ -1,7 +1,7 @@
 /**
  * Shared guard for the workflow_* tool family.
  *
- * A "workflow" in OpenAidy is a Task whose `planningEnabled` flag is true.
+ * A "workflow" in Aidy is a Task whose `planningEnabled` flag is true.
  * The web UI uses the same definition to gate access to the graph editor
  * (`apps/web/src/pages/WorkflowsPage.tsx`). Keeping a single source of truth
  * here means the agent tool family cannot drift from what the UI treats as

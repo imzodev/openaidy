@@ -2,7 +2,7 @@
  * Anthropic Provider Profile
  *
  * Reads `id`, `name`, `baseUrl`, and the model list from
- * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
+ * `PROVIDER_PRESETS` (in `@aidyagent/shared-types`) — the single
  * source of truth.
  *
  * The default `validateApiKey` would `GET ${baseUrl}/models` with
@@ -21,7 +21,7 @@
  * MiniMax's OAuth bypasses the generic connection-service path.
  */
 
-import { PROVIDER_PRESETS, type AuthMethod } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS, type AuthMethod } from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 
 const ANTHROPIC_VERSION = '2023-06-01';

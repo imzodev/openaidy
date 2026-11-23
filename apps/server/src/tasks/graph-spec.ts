@@ -2,7 +2,7 @@ import type {
   WorkflowGraph,
   WorkflowGraphEdge,
   WorkflowGraphNode,
-} from '@openaidy/workflow-templates';
+} from '@aidyagent/workflow-templates';
 
 /**
  * Parses a whole workflow graph as agents and API clients write it into

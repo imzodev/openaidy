@@ -2,7 +2,7 @@
  * Google/Gemini Provider Profile
  *
  * Reads `id`, `name`, `baseUrl`, and the model list from
- * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
+ * `PROVIDER_PRESETS` (in `@aidyagent/shared-types`) — the single
  * source of truth. Handles Google Gemini API requests using the
  * gemini vendor family.
  *
@@ -13,7 +13,7 @@
  * auth scheme.
  */
 
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 
 const PRESET = PROVIDER_PRESETS.find((p) => p.id === 'google');

@@ -10,7 +10,7 @@ import {
   WS_ERROR_CODES,
   type NodeRpcResponse,
   type NodeRpcError,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mock Factories

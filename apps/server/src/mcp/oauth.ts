@@ -33,11 +33,11 @@ import type {
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import {
   McpOAuthCredentialsRepository,
   type DatabaseClient,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { getEncryptionService } from '../lib/encryption';
 import { generateState } from '../providers/oauth/pkce';
 import type { OAuthStateStore } from '../providers/oauth/state-store';
@@ -189,7 +189,7 @@ export class McpOAuthClientProvider implements OAuthClientProvider {
   get clientMetadata(): OAuthClientMetadata {
     const scopes = this.config.auth?.scopes;
     return {
-      client_name: 'OpenAidy',
+      client_name: 'Aidy',
       redirect_uris: this.data.redirectUrl ? [this.data.redirectUrl] : [],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -324,7 +324,7 @@ export class McpOAuthService {
 
   /**
    * Begin an interactive sign-in. `origin` is the browser origin the UI runs
-   * on, so the redirect lands back on the same host whether OpenAidy is
+   * on, so the redirect lands back on the same host whether Aidy is
    * reached via localhost, an IP, or a domain.
    */
   async startAuthorization(

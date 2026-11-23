@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 import { IdentityAdapterCodec } from './provider-codec.js';
 import { DeepSeekAdapterCodec } from './provider-codec/deepseek.js';
 import { MiniMaxAdapterCodec } from './provider-codec/minimax.js';

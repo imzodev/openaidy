@@ -38,7 +38,7 @@ export function relativePathError(filePath: string): string | null {
 // would silently 404 every addon's styling).
 export const TAILWIND_CDN_URL = 'https://cdn.tailwindcss.com';
 export const TAILWIND_CDN_HOST = 'cdn.tailwindcss.com';
-const SDK_SCRIPT_TAG = '<script src="/sdk/openaidy-sdk.js">';
+const SDK_SCRIPT_TAG = '<script src="/sdk/aidy-sdk.js">';
 
 /**
  * Inject the Tailwind CDN <script> tag into an addon's index.html, right
@@ -64,14 +64,14 @@ export function validateEntryScripts(html: string): string | null {
   if (!html.includes('<script src="index.js">')) {
     return 'app/index.html must contain <script src="index.js"></script> before </body>';
   }
-  if (!html.includes('<script src="/sdk/openaidy-sdk.js">')) {
-    return 'app/index.html must load the SDK statically: <script src="/sdk/openaidy-sdk.js"></script> must appear before <script src="index.js">';
+  if (!html.includes('<script src="/sdk/aidy-sdk.js">')) {
+    return 'app/index.html must load the SDK statically: <script src="/sdk/aidy-sdk.js"></script> must appear before <script src="index.js">';
   }
   if (
-    html.indexOf('<script src="/sdk/openaidy-sdk.js">') >
+    html.indexOf('<script src="/sdk/aidy-sdk.js">') >
     html.indexOf('<script src="index.js">')
   ) {
-    return '<script src="/sdk/openaidy-sdk.js"> must appear before <script src="index.js"> in app/index.html';
+    return '<script src="/sdk/aidy-sdk.js"> must appear before <script src="index.js"> in app/index.html';
   }
   return null;
 }

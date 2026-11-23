@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlanningService, type PlanningServiceOptions } from './service';
 import { buildPlanningPrompt, buildComplexityPrompt } from './prompts';
-import type { TasksRepository, SubtasksRepository, Task } from '@openaidy/db';
+import type { TasksRepository, SubtasksRepository, Task } from '@aidyagent/db';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 

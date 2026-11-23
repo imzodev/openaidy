@@ -21,7 +21,7 @@ describe('slugify', () => {
 Run only this file while iterating:
 
 ```bash
-pnpm --filter @openaidy/server exec vitest run src/lib/slugify.test.ts
+pnpm --filter @aidyagent/server exec vitest run src/lib/slugify.test.ts
 ```
 
 It fails because `slugify` doesn't exist yet. Good — that's RED for the

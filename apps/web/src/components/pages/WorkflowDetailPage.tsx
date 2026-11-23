@@ -35,7 +35,7 @@ import {
   Loader2,
   Zap,
 } from 'lucide-solid';
-import type { WorkflowGraphCheck } from '@openaidy/workflow-templates';
+import type { WorkflowGraphCheck } from '@aidyagent/workflow-templates';
 import { WorkflowEditor } from '../tasks/workflow/WorkflowEditor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { WorkflowTriggersPanel } from '../workflows/WorkflowTriggersPanel';

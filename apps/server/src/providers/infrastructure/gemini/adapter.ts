@@ -17,7 +17,7 @@ import {
   type ModelResponse,
   type ModelStreamEvent,
   type ProviderResult,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import { mapRequest } from './request-mapper';
 import { buildGeminiFunctionNameMap } from './name-mapping';
 import {
@@ -90,7 +90,7 @@ function logGeminiInvocation(
 type StreamProcessingState = {
   started: boolean;
   finishReason: Exclude<
-    import('@openaidy/runtime').FinishReason,
+    import('@aidyagent/runtime').FinishReason,
     'error'
   > | null;
 };

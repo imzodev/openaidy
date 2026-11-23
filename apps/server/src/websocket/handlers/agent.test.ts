@@ -10,7 +10,7 @@ import {
 } from './agent';
 import { MessageRouter, type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
-import { createWSMessage } from '@openaidy/shared-types';
+import { createWSMessage } from '@aidyagent/shared-types';
 import type { AgentRegistry } from '../../agents/registry';
 import type { Agent } from '../../agents/schema';
 

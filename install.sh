@@ -1,13 +1,13 @@
 #!/bin/bash
 # ============================================================================
-# OpenAidy Installer
+# Aidy Installer
 # ============================================================================
-# Installs OpenAidy on Linux, macOS, and WSL2 from the prebuilt npm package
-# (@openaidy/app). No git clone, no source build — just Node + ripgrep + uv +
-# git, then `npm install -g @openaidy/app`.
+# Installs Aidy on Linux, macOS, and WSL2 from the prebuilt npm package
+# (@aidyagent/app). No git clone, no source build — just Node + ripgrep + uv +
+# git, then `npm install -g @aidyagent/app`.
 #
 # Usage:
-#   curl -fsSL https://openaidy.com/install.sh | bash
+#   curl -fsSL https://aidyagent.app/install.sh | bash
 #
 # Or with options:
 #   curl -fsSL ... | bash -s -- --version 0.2.1
@@ -26,14 +26,14 @@ BOLD='\033[1m'
 
 # Configuration
 # Data root (config, state, credentials, logs) AND where a managed Node is
-# installed. Honors an existing OPENAIDY_HOME; matches the CLI's default so a
-# later `openaidy` invocation without env finds the same home.
-OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
+# installed. Honors an existing AIDY_HOME; matches the CLI's default so a
+# later `aidy` invocation without env finds the same home.
+AIDY_HOME="${AIDY_HOME:-$HOME/.aidy}"
 NODE_VERSION="22.23.1"
-NPM_PKG="@openaidy/app"
+NPM_PKG="@aidyagent/app"
 
 # Options
-VERSION=""            # empty = @latest; else install @openaidy/app@$VERSION
+VERSION=""            # empty = @latest; else install @aidyagent/app@$VERSION
 NON_INTERACTIVE=false
 
 # State
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --dir)
-            OPENAIDY_HOME="$2"
+            AIDY_HOME="$2"
             shift 2
             ;;
         --non-interactive|-NonInteractive)
@@ -55,11 +55,11 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-Help)
-            echo "Usage: curl -fsSL https://openaidy.com/install.sh | bash [options]"
+            echo "Usage: curl -fsSL https://aidyagent.app/install.sh | bash [options]"
             echo ""
             echo "Options:"
-            echo "  --dir <path>       Data/home directory (default: ~/.openaidy)"
-            echo "  --version <x.y.z>  Install a specific @openaidy/app version (default: latest)"
+            echo "  --dir <path>       Data/home directory (default: ~/.aidy)"
+            echo "  --version <x.y.z>  Install a specific @aidyagent/app version (default: latest)"
             echo "  --non-interactive  Run without interactive prompts"
             exit 0
             ;;
@@ -70,7 +70,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR="$OPENAIDY_HOME"
+INSTALL_DIR="$AIDY_HOME"
 
 # OS detection
 detect_os() {
@@ -128,10 +128,10 @@ detect_os() {
 
 # Logs go to stderr so they never pollute a `$(...)` capture of a function's
 # stdout (e.g. run_init returns the token, load_jwt_secret returns the secret).
-log_info()    { echo -e "${BLUE}[openaidy]${NC} $*" >&2; }
-log_success() { echo -e "${GREEN}[openaidy]${NC} ✓ $*" >&2; }
-log_warn()    { echo -e "${YELLOW}[openaidy]${NC} ⚠ $*" >&2; }
-log_error()   { echo -e "${RED}[openaidy]${NC} ✗ $*" >&2; }
+log_info()    { echo -e "${BLUE}[aidy]${NC} $*" >&2; }
+log_success() { echo -e "${GREEN}[aidy]${NC} ✓ $*" >&2; }
+log_warn()    { echo -e "${YELLOW}[aidy]${NC} ⚠ $*" >&2; }
+log_error()   { echo -e "${RED}[aidy]${NC} ✗ $*" >&2; }
 
 # ============================================================================
 # Node.js Provisioning
@@ -216,7 +216,7 @@ install_node() {
     NODE_PROVISIONED=true
 }
 
-# OpenAidy's SQLite layer uses Node's built-in `node:sqlite`, available without
+# Aidy's SQLite layer uses Node's built-in `node:sqlite`, available without
 # a flag only on Node >= 22.13 (older Node lacks it or hides it behind
 # --experimental-sqlite). A too-old system Node is bypassed for a managed copy.
 node_is_adequate() {
@@ -246,7 +246,7 @@ check_node() {
     if [ -x "$INSTALL_DIR/node/bin/node" ]; then
         export PATH="$INSTALL_DIR/node/bin:$PATH"
         if node_is_adequate; then
-            log_success "Node.js $(node --version) found (OpenAidy-managed)"
+            log_success "Node.js $(node --version) found (Aidy-managed)"
             return 0
         fi
     fi
@@ -338,7 +338,7 @@ install_ripgrep() {
 check_ripgrep() {
     log_info "Checking ripgrep..."
 
-    # Honor OpenAidy-managed install from a previous run.
+    # Honor Aidy-managed install from a previous run.
     if [ -x "$INSTALL_DIR/bin/rg" ]; then
         export PATH="$INSTALL_DIR/bin:$PATH"
     fi
@@ -394,7 +394,7 @@ install_uv() {
 check_uv() {
     log_info "Checking uv..."
 
-    # Honor an OpenAidy-managed install from a previous run.
+    # Honor an Aidy-managed install from a previous run.
     local link_dir
     link_dir="$(get_node_link_dir)"
     if [ -x "$link_dir/uvx" ]; then
@@ -505,10 +505,10 @@ check_git() {
 }
 
 # ============================================================================
-# OpenAidy CLI (prebuilt npm package)
+# Aidy CLI (prebuilt npm package)
 # ============================================================================
 
-install_openaidy() {
+install_aidy() {
     local spec="$NPM_PKG"
     [ -n "$VERSION" ] && spec="$NPM_PKG@$VERSION"
     log_info "Installing $spec from npm..."
@@ -522,27 +522,27 @@ install_openaidy() {
         exit 1
     fi
 
-    # Expose the `openaidy` bin on PATH. npm installs it into the global prefix's
+    # Expose the `aidy` bin on PATH. npm installs it into the global prefix's
     # bin dir; symlink it into the same link dir we use for node.
     local link_dir npm_prefix bin_src
     link_dir="$(get_node_link_dir)"
     mkdir -p "$link_dir"
     npm_prefix="$(npm prefix -g 2>/dev/null || echo "$INSTALL_DIR/node")"
-    for bin_src in "$npm_prefix/bin/openaidy" "$INSTALL_DIR/node/bin/openaidy"; do
+    for bin_src in "$npm_prefix/bin/aidy" "$INSTALL_DIR/node/bin/aidy"; do
         if [ -x "$bin_src" ]; then
-            ln -sf "$bin_src" "$link_dir/openaidy"
+            ln -sf "$bin_src" "$link_dir/aidy"
             break
         fi
     done
 
-    log_success "openaidy installed ($spec)"
+    log_success "aidy installed ($spec)"
 }
 
 # ============================================================================
 # Bootstrap Admin Token
 # ============================================================================
 
-# Generate a 32-byte hex JWT secret. Persisted at $OPENAIDY_HOME/state/install.json
+# Generate a 32-byte hex JWT secret. Persisted at $AIDY_HOME/state/install.json
 # so subsequent installs reuse it (idempotency).
 generate_jwt_secret() {
     if command -v openssl >/dev/null 2>&1; then
@@ -553,7 +553,7 @@ generate_jwt_secret() {
 }
 
 load_jwt_secret() {
-    local manifest="$OPENAIDY_HOME/state/install.json"
+    local manifest="$AIDY_HOME/state/install.json"
     if [ -f "$manifest" ]; then
         local existing
         existing=$(grep -E '"wsTokenSecret"\s*:' "$manifest" | sed -E 's/.*"wsTokenSecret"\s*:\s*"([^"]+)".*/\1/')
@@ -563,10 +563,10 @@ load_jwt_secret() {
             return 0
         fi
     fi
-    mkdir -p "$OPENAIDY_HOME/state"
+    mkdir -p "$AIDY_HOME/state"
     local new_secret
     new_secret=$(generate_jwt_secret)
-    local tmp_manifest="$OPENAIDY_HOME/state/install.json.tmp"
+    local tmp_manifest="$AIDY_HOME/state/install.json.tmp"
     cat > "$tmp_manifest" <<EOF
 {
   "wsTokenSecret": "$new_secret",
@@ -582,8 +582,8 @@ EOF
 run_init() {
     log_info "Generating bootstrap admin token..."
     local init_output
-    if ! init_output=$("$link_dir_global/openaidy" init 2>&1); then
-        log_error "openaidy init failed"
+    if ! init_output=$("$link_dir_global/aidy" init 2>&1); then
+        log_error "aidy init failed"
         echo "$init_output" >&2
         exit 1
     fi
@@ -592,7 +592,7 @@ run_init() {
     token=$(printf '%s\n' "$init_output" | grep '^Bootstrap admin token: ' | sed 's/^Bootstrap admin token: //' | head -1)
 
     if [ -z "$token" ]; then
-        log_error "openaidy init succeeded but no token line was printed"
+        log_error "aidy init succeeded but no token line was printed"
         echo "$init_output" >&2
         exit 1
     fi
@@ -602,9 +602,9 @@ run_init() {
 
 run_start() {
     # The packaged server serves the web UI itself on one port, so plain
-    # `openaidy start` needs no flags (no Vite dev server is spawned).
+    # `aidy start` needs no flags (no Vite dev server is spawned).
     log_info "Starting the server (this may take up to 30 seconds)..."
-    "$link_dir_global/openaidy" start 2>&1
+    "$link_dir_global/aidy" start 2>&1
 }
 
 # Capture the wrapper/link path now so run_init/run_start can invoke the bin.
@@ -616,7 +616,7 @@ link_dir_global="$(get_node_link_dir)"
 
 main() {
     echo ""
-    echo -e "${BOLD}OpenAidy Installer${NC}"
+    echo -e "${BOLD}Aidy Installer${NC}"
     echo ""
 
     detect_os
@@ -628,12 +628,12 @@ main() {
     check_ripgrep
     check_uv
     check_git
-    install_openaidy
+    install_aidy
 
     # Ensure JWT secret + generate bootstrap-admin token (idempotent).
     export WS_TOKEN_SECRET
     WS_TOKEN_SECRET=$(load_jwt_secret)
-    export OPENAIDY_HOME="$INSTALL_DIR"
+    export AIDY_HOME="$INSTALL_DIR"
     BOOTSTRAP_TOKEN=$(run_init)
 
     # Start the server and open the browser.
@@ -648,7 +648,7 @@ main() {
     fi
 
     echo ""
-    log_success "OpenAidy is installed."
+    log_success "Aidy is installed."
     echo ""
     echo "Bootstrap admin token: $BOOTSTRAP_TOKEN"
     echo ""
@@ -678,26 +678,26 @@ main() {
                 ;;
         esac
         echo ""
-        echo "Use 'openaidy stop' to stop the server."
+        echo "Use 'aidy stop' to stop the server."
         if [ "$OS" = "linux" ] && [ -d /run/systemd/system ]; then
             echo ""
-            echo "Tip: run 'openaidy service install' to keep OpenAidy running with"
+            echo "Tip: run 'aidy service install' to keep Aidy running with"
             echo "systemd - it starts at boot and restarts automatically if it crashes."
         fi
     else
         AUTH_URL="http://localhost:3001/?token=$(printf '%s' "$BOOTSTRAP_TOKEN" | sed 's/#/%23/g; s/&/%26/g; s/?/%3F/g')"
-        echo "Run 'openaidy start' to bring the server online,"
+        echo "Run 'aidy start' to bring the server online,"
         echo "then open $AUTH_URL in your browser."
         echo ""
         echo "If it still doesn't start, check the log at:"
-        echo "  $OPENAIDY_HOME/logs/server.log"
+        echo "  $AIDY_HOME/logs/server.log"
     fi
     echo ""
 
     if [ "$(get_node_link_dir)" = "$HOME/.local/bin" ]; then
         case ":$PATH:" in
             *":$HOME/.local/bin:"*) ;;
-            *) echo "Note: add ~/.local/bin to your PATH to run 'openaidy' in new shells." ;;
+            *) echo "Note: add ~/.local/bin to your PATH to run 'aidy' in new shells." ;;
         esac
     fi
 }

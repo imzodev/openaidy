@@ -5,7 +5,7 @@ import {
   createProviderError,
   type ModelProvider,
   type ProviderDescriptor,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import { ProviderRegistryService, createProviderRegistry } from './registry';
 import { ProviderSelectionService, createProviderSelection } from './selection';
 

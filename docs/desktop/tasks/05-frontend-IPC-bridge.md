@@ -36,7 +36,7 @@ apps/web/package.json                      ← ADD: @tauri-apps/api
 ### Step 5.1: Install @tauri-apps/api in apps/web
 
 ```bash
-cd /tmp/openaidy/apps/web
+cd /tmp/aidy/apps/web
 pnpm add @tauri-apps/api
 ```
 
@@ -79,7 +79,7 @@ export interface ServiceStatus {
   port: number | null;
   restart_attempts: number;
   pid: number | null;
-  openaidy_home: string;
+  aidy_home: string;
 }
 
 export interface ServiceBridge {
@@ -213,13 +213,13 @@ export function hideToTray(): void {
  * This is how the frontend knows where to connect.
  */
 export async function getServicePort(): Promise<number> {
-  // In Tauri: read from OPENAIDY_HOME/port via Rust command
+  // In Tauri: read from AIDY_HOME/port via Rust command
   // In browser: use hardcoded dev port
   if (isTauri()) {
     const { readTextFile } = require('@tauri-apps/plugin-fs');
     const { homeDir } = require('@tauri-apps/api/path');
     const home = await homeDir();
-    const portFile = `${home}/.config/openaidy/port`;
+    const portFile = `${home}/.config/aidy/port`;
     const portStr = await readTextFile(portFile);
     return parseInt(portStr.trim(), 10);
   }

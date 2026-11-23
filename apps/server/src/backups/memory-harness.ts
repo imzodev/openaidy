@@ -1,5 +1,5 @@
 /**
- * Memory harness for backups: builds a synthetic OPENAIDY_HOME, exports it,
+ * Memory harness for backups: builds a synthetic AIDY_HOME, exports it,
  * imports the result into a second home, and prints peak RSS as JSON.
  *
  * Run under a small heap so a regression to whole-archive buffering fails
@@ -25,8 +25,8 @@ const dbMb = Number(process.env.BACKUP_HARNESS_DB_MB ?? 16);
 
 function homePaths(root: string): BackupPaths {
   return {
-    dbPath: path.join(root, 'data', 'openaidy.db'),
-    configPath: path.join(root, 'openaidy.json'),
+    dbPath: path.join(root, 'data', 'aidy.db'),
+    configPath: path.join(root, 'aidy.json'),
     workspacesDir: path.join(root, 'workspaces'),
     skillsDir: path.join(root, 'skills'),
     addonsDir: path.join(root, 'addons'),
@@ -48,7 +48,7 @@ const sample = () => {
 };
 const sampler = setInterval(sample, 20);
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-mem-'));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aidy-mem-'));
 try {
   const src = homePaths(path.join(root, 'src'));
   const dst = homePaths(path.join(root, 'dst'));

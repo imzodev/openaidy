@@ -155,7 +155,7 @@ export class AddonStorageEngine {
         value      TEXT NOT NULL,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      CREATE TABLE IF NOT EXISTS _openaidy_migrations (
+      CREATE TABLE IF NOT EXISTS _aidy_migrations (
         idx        INTEGER PRIMARY KEY,
         applied_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -173,7 +173,7 @@ export class AddonStorageEngine {
     migrations: readonly string[],
   ): void {
     const { max } = db
-      .prepare('SELECT COALESCE(MAX(idx), -1) AS max FROM _openaidy_migrations')
+      .prepare('SELECT COALESCE(MAX(idx), -1) AS max FROM _aidy_migrations')
       .get() as { max: number };
 
     for (let i = 0; i < migrations.length; i++) {
@@ -183,7 +183,7 @@ export class AddonStorageEngine {
       db.exec('BEGIN');
       try {
         db.exec(sql);
-        db.prepare('INSERT INTO _openaidy_migrations (idx) VALUES (?)').run(i);
+        db.prepare('INSERT INTO _aidy_migrations (idx) VALUES (?)').run(i);
         db.exec('COMMIT');
       } catch (err) {
         db.exec('ROLLBACK');

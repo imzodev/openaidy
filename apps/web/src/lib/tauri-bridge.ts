@@ -27,7 +27,7 @@ export interface ServiceStatus {
   port: number | null;
   restart_attempts: number;
   pid: number | null;
-  openaidy_home: string;
+  aidy_home: string;
 }
 
 export interface ServiceBridge {

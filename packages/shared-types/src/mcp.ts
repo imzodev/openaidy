@@ -162,7 +162,7 @@ export type ImportMcpServersRequest = {
 
 /**
  * How connecting a catalog integration works:
- * - `oauth`: one click — the server registers OpenAidy automatically
+ * - `oauth`: one click — the server registers Aidy automatically
  * - `oauth-own-app`: sign-in, but the user must first create an OAuth app
  *   with the provider and paste its client ID/secret
  */

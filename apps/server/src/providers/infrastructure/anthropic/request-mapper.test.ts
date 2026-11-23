@@ -12,7 +12,7 @@ import {
   mapToolChoice,
   mapRequest,
 } from './request-mapper';
-import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
+import type { Message, ModelRequest, ToolDefinition } from '@aidyagent/runtime';
 
 describe('mapMessage', () => {
   it('should return null for system message', () => {
@@ -46,7 +46,11 @@ describe('mapMessage', () => {
       role: 'assistant',
       content: 'Let me check that.',
       toolCalls: [
-        { id: 'toolu_123', name: 'get_weather', arguments: '{"city": "Berlin"}' },
+        {
+          id: 'toolu_123',
+          name: 'get_weather',
+          arguments: '{"city": "Berlin"}',
+        },
       ],
     };
     const result = mapMessage(message);
@@ -55,7 +59,12 @@ describe('mapMessage', () => {
       role: 'assistant',
       content: [
         { type: 'text', text: 'Let me check that.' },
-        { type: 'tool_use', id: 'toolu_123', name: 'get_weather', input: { city: 'Berlin' } },
+        {
+          type: 'tool_use',
+          id: 'toolu_123',
+          name: 'get_weather',
+          input: { city: 'Berlin' },
+        },
       ],
     });
   });
@@ -65,7 +74,11 @@ describe('mapMessage', () => {
       role: 'assistant',
       content: '', // Empty content is falsy, so no text block added
       toolCalls: [
-        { id: 'toolu_123', name: 'get_weather', arguments: '{"city": "Berlin"}' },
+        {
+          id: 'toolu_123',
+          name: 'get_weather',
+          arguments: '{"city": "Berlin"}',
+        },
       ],
     };
     const result = mapMessage(message);
@@ -162,9 +175,7 @@ describe('extractSystemInstruction', () => {
   });
 
   it('should return undefined when no system messages', () => {
-    const messages: Message[] = [
-      { role: 'user', content: 'Hi' },
-    ];
+    const messages: Message[] = [{ role: 'user', content: 'Hi' }];
     const result = extractSystemInstruction(messages);
 
     expect(result).toBeUndefined();
@@ -276,7 +287,9 @@ describe('mapRequest', () => {
       ],
     };
 
-    const result = mapRequest(request, { systemInstruction: 'Override instruction' });
+    const result = mapRequest(request, {
+      systemInstruction: 'Override instruction',
+    });
 
     expect(result.system).toBe('Override instruction');
   });
@@ -286,7 +299,11 @@ describe('mapRequest', () => {
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hello' }],
       tools: [
-        { name: 'get_weather', description: 'Get weather', parameters: { type: 'object' } },
+        {
+          name: 'get_weather',
+          description: 'Get weather',
+          parameters: { type: 'object' },
+        },
       ],
     };
 
@@ -301,7 +318,11 @@ describe('mapRequest', () => {
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hello' }],
       tools: [
-        { name: 'get_weather', description: 'Get weather', parameters: { type: 'object' } },
+        {
+          name: 'get_weather',
+          description: 'Get weather',
+          parameters: { type: 'object' },
+        },
       ],
       toolChoice: 'auto',
     };

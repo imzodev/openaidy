@@ -1,7 +1,7 @@
 /**
  * Curated integrations offered in the "Browse integrations" gallery.
  *
- * Unlike the preinstalled servers (config/openaidy.template.json), nothing
+ * Unlike the preinstalled servers (config/aidy.template.json), nothing
  * here is added to a user's config until they pick it. Every `oauth` entry
  * was checked to publish MCP authorization metadata with a dynamic client
  * registration endpoint, so connecting is a single sign-in. `oauth-own-app`
@@ -9,11 +9,11 @@
  * OAuth client in the provider's console and pastes its ID/secret.
  *
  * Servers that require a provider-approved client (HubSpot, Asana, Box,
- * Shopify, Figma) are deliberately left out until OpenAidy has one.
+ * Shopify, Figma) are deliberately left out until Aidy has one.
  */
 
-import type { McpServerConfig } from '@openaidy/config';
-import type { McpCatalogEntry } from '@openaidy/shared-types';
+import type { McpServerConfig } from '@aidyagent/config';
+import type { McpCatalogEntry } from '@aidyagent/shared-types';
 
 export type McpCatalogDefinition = Omit<McpCatalogEntry, 'installed'>;
 

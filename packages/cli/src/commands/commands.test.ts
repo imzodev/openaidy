@@ -32,15 +32,15 @@ const {
 
 vi.mock('@clack/prompts', () => mockClack);
 
-// Mock @openaidy/control-plane
-vi.mock('@openaidy/control-plane', () => ({
+// Mock @aidyagent/control-plane
+vi.mock('@aidyagent/control-plane', () => ({
   BootstrapAdminWorkflow: vi.fn().mockImplementation(() => ({
     inspectToken: mockInspectToken,
   })),
 }));
 
-// Mock @openaidy/sdk
-vi.mock('@openaidy/sdk', () => ({
+// Mock @aidyagent/sdk
+vi.mock('@aidyagent/sdk', () => ({
   WebSocketClient: vi.fn().mockImplementation(() => ({
     connect: mockConnect,
     sendRequest: mockSendRequest,
@@ -58,7 +58,7 @@ vi.mock('../lib/config.js', () => ({
   resolveCLIConfig: () => ({
     wsUrl: 'ws://localhost:3001/ws',
     httpUrl: 'http://localhost:3001',
-    tokenPath: '/tmp/test-openaidy/bootstrap-admin.json',
+    tokenPath: '/tmp/test-aidy/bootstrap-admin.json',
     jwtSecret: 'test-secret',
     bootstrapAdminEnabled: true,
   }),

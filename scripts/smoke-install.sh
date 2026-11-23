@@ -2,16 +2,16 @@
 # ============================================================================
 # scripts/smoke-install.sh
 # ============================================================================
-# Full-stack smoke test for the OpenAidy installation flow (PR1 + PR2).
+# Full-stack smoke test for the Aidy installation flow (PR1 + PR2).
 #
 # Tests:
-#  1. `openaidy init` — mints and persists a bootstrap-admin token
+#  1. `aidy init` — mints and persists a bootstrap-admin token
 #  2. Token file validation (JWT shape, fields, 0o600 on POSIX)
 #  3. Idempotency — re-run does not rewrite the token
-#  4. `openaidy start` — spawns server and polls /health
-#  5. `openaidy status` — reports running state
-#  6. `openaidy stop` — cleanly shuts down server
-#  7. `openaidy status` — reports stopped after shutdown
+#  4. `aidy start` — spawns server and polls /health
+#  5. `aidy status` — reports running state
+#  6. `aidy stop` — cleanly shuts down server
+#  7. `aidy status` — reports stopped after shutdown
 #
 # Two modes:
 #  - default: exercises install.sh end-to-end (requires git remote + pnpm)
@@ -30,7 +30,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SMOKE_HOME="${SMOKE_HOME:-$(mktemp -d -t openaidy-smoke-XXXXXX)}"
+SMOKE_HOME="${SMOKE_HOME:-$(mktemp -d -t aidy-smoke-XXXXXX)}"
 SMOKE_BRANCH="${SMOKE_BRANCH:-main}"
 LOCAL_REPO="${LOCAL_REPO:-}"
 
@@ -67,7 +67,7 @@ if command -v openssl >/dev/null 2>&1; then
 else
     WS_TOKEN_SECRET=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
 fi
-export OPENAIDY_HOME="$SMOKE_HOME"
+export AIDY_HOME="$SMOKE_HOME"
 export CI=1  # suppress interactive prompts
 
 # Determine the CLI entry point
@@ -75,27 +75,27 @@ if [ -n "$LOCAL_REPO" ]; then
     if [ ! -d "$LOCAL_REPO/packages/cli" ]; then
         fail "LOCAL_REPO=$LOCAL_REPO does not contain packages/cli"
     fi
-    CLI="node --import tsx $LOCAL_REPO/packages/cli/bin/openaidy.ts"
+    CLI="node --import tsx $LOCAL_REPO/packages/cli/bin/aidy.ts"
     log "Using LOCAL_REPO=$LOCAL_REPO"
 else
-    CLI="openaidy"
+    CLI="aidy"
 fi
-log "Using OPENAIDY_HOME=$SMOKE_HOME"
+log "Using AIDY_HOME=$SMOKE_HOME"
 
 # ============================================================================
-# Phase 1: openaidy init
+# Phase 1: aidy init
 # ============================================================================
-log "=== Phase 1: openaidy init ==="
+log "=== Phase 1: aidy init ==="
 INIT_OUTPUT=$(cd "$REPO_ROOT" && $CLI init 2>&1)
 INIT_EXIT=$?
 if [ "$INIT_EXIT" -ne 0 ]; then
     echo "$INIT_OUTPUT" >&2
-    fail "openaidy init exited $INIT_EXIT"
+    fail "aidy init exited $INIT_EXIT"
 fi
 
 if ! printf '%s\n' "$INIT_OUTPUT" | grep -q "^Bootstrap admin token: "; then
     echo "$INIT_OUTPUT" >&2
-    fail "openaidy init stdout missing 'Bootstrap admin token:' line"
+    fail "aidy init stdout missing 'Bootstrap admin token:' line"
 fi
 
 log "OK: init produced parseable token line"
@@ -150,7 +150,7 @@ sleep 1
 
 if ! INIT_OUTPUT_2=$(cd "$REPO_ROOT" && $CLI init 2>&1); then
     echo "$INIT_OUTPUT_2" >&2
-    fail "openaidy init re-run exited non-zero"
+    fail "aidy init re-run exited non-zero"
 fi
 
 SECOND_HASH=$(sha256sum "$TOKEN_FILE" | awk '{print $1}')
@@ -160,14 +160,14 @@ fi
 log "OK: idempotent — token unchanged across re-run"
 
 # ============================================================================
-# Phase 4: openaidy start
+# Phase 4: aidy start
 # ============================================================================
-log "=== Phase 4: openaidy start ==="
+log "=== Phase 4: aidy start ==="
 
 # Skip on Windows — start needs Unix process management
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*|Windows*)
-        log "SKIP: openaidy start/status/stop — Windows (manual test via smoke-install.ps1)"
+        log "SKIP: aidy start/status/stop — Windows (manual test via smoke-install.ps1)"
         log ""
         log "============================================"
         log "SUCCESS: smoke-install.sh (init phases)"
@@ -179,19 +179,19 @@ esac
 
 # Build server first so the dist is available
 log "Building server..."
-pnpm --filter @openaidy/server build >/dev/null 2>&1 || true
+pnpm --filter @aidyagent/server build >/dev/null 2>&1 || true
 # If build fails, start will catch it with a clear message
 
 START_OUTPUT=$(cd "$REPO_ROOT" && $CLI start 2>&1)
 START_EXIT=$?
 if [ "$START_EXIT" -ne 0 ]; then
     echo "$START_OUTPUT" >&2
-    fail "openaidy start exited $START_EXIT"
+    fail "aidy start exited $START_EXIT"
 fi
 
 if ! printf '%s\n' "$START_OUTPUT" | grep -q "Server is ready"; then
     echo "$START_OUTPUT" >&2
-    fail "openaidy start did not confirm readiness"
+    fail "aidy start did not confirm readiness"
 fi
 log "OK: server started"
 
@@ -199,20 +199,20 @@ log "OK: server started"
 STATUS_OUTPUT=$(cd "$REPO_ROOT" && $CLI status 2>&1)
 if ! printf '%s\n' "$STATUS_OUTPUT" | grep -q "running"; then
     echo "$STATUS_OUTPUT" >&2
-    fail "openaidy status did not report running"
+    fail "aidy status did not report running"
 fi
 log "OK: status reports running"
 
 # ============================================================================
-# Phase 5: openaidy stop
+# Phase 5: aidy stop
 # ============================================================================
-log "=== Phase 5: openaidy stop ==="
+log "=== Phase 5: aidy stop ==="
 
 STOP_OUTPUT=$(cd "$REPO_ROOT" && $CLI stop 2>&1)
 STOP_EXIT=$?
 if [ "$STOP_EXIT" -ne 0 ]; then
     echo "$STOP_OUTPUT" >&2
-    fail "openaidy stop exited $STOP_EXIT"
+    fail "aidy stop exited $STOP_EXIT"
 fi
 log "OK: server stopped"
 
@@ -220,7 +220,7 @@ log "OK: server stopped"
 STATUS_AFTER=$(cd "$REPO_ROOT" && $CLI status 2>&1)
 if ! printf '%s\n' "$STATUS_AFTER" | grep -q "stopped"; then
     echo "$STATUS_AFTER" >&2
-    fail "openaidy status did not report stopped after stop"
+    fail "aidy status did not report stopped after stop"
 fi
 log "OK: status reports stopped after shutdown"
 

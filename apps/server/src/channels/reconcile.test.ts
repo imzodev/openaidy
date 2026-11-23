@@ -5,7 +5,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type {
   WhatsAppChannelConfig,
   DiscordChannelConfig,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import {
   createChannelRegistry,
   reconcileChannelRegistry,

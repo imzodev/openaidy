@@ -5,7 +5,7 @@ import path from 'node:path';
 import { parseComponentManifest } from './component-manifest.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SDK_PATH = path.join(__dirname, '../sdk/openaidy-sdk.js');
+const SDK_PATH = path.join(__dirname, '../sdk/aidy-sdk.js');
 
 describe('parseComponentManifest', () => {
   it('parses a single @component block with required and optional params', () => {
@@ -96,7 +96,7 @@ describe('parseComponentManifest', () => {
     });
   });
 
-  it('parses every sdk.ui.* component in the real openaidy-sdk.js', () => {
+  it('parses every sdk.ui.* component in the real aidy-sdk.js', () => {
     const source = readFileSync(SDK_PATH, 'utf-8');
     const manifest = parseComponentManifest(source);
     expect(manifest.components).toHaveLength(25);

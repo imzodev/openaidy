@@ -18,7 +18,7 @@ import {
   type ConfigUpdatedEvent,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Types

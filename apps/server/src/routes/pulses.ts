@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@aidyagent/db';
 import type { SessionMessageService } from '../sessions/service';
 import { triggerPulseNow } from '../scheduler';
 import type { PulseRunnableDeps } from '../scheduler/pulse-runnable-adapter';
@@ -67,7 +67,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
     }
 
     try {
-      const input: import('@openaidy/shared-types').CreatePulseInput = {
+      const input: import('@aidyagent/shared-types').CreatePulseInput = {
         name: parsed.name,
         prompt: parsed.prompt,
         schedule: toScheduleInput(parsed.schedule),
@@ -107,7 +107,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
       };
     }
 
-    const listInput: import('@openaidy/shared-types').ListPulsesFilters = {
+    const listInput: import('@aidyagent/shared-types').ListPulsesFilters = {
       limit: parsed.limit,
       offset: parsed.offset,
     };
@@ -170,7 +170,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
     }
 
     try {
-      const input: import('@openaidy/shared-types').UpdatePulseInput = {};
+      const input: import('@aidyagent/shared-types').UpdatePulseInput = {};
       if (parsed.name !== undefined) input.name = parsed.name;
       if (parsed.prompt !== undefined) input.prompt = parsed.prompt;
       if (parsed.schedule !== undefined) {
@@ -273,7 +273,7 @@ export default pulseRoutes;
 function stripUndefined(value: {
   toOwner?: boolean | undefined;
   onlyIfNeeded?: boolean | undefined;
-}): import('@openaidy/shared-types').PulseDelivery {
+}): import('@aidyagent/shared-types').PulseDelivery {
   return {
     ...(value.toOwner !== undefined ? { toOwner: value.toOwner } : {}),
     ...(value.onlyIfNeeded !== undefined

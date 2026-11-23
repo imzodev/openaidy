@@ -2,7 +2,7 @@
  * API client for task endpoints
  */
 
-import type { WorkflowGraphCheck } from '@openaidy/workflow-templates';
+import type { WorkflowGraphCheck } from '@aidyagent/workflow-templates';
 import { API_BASE } from './api';
 import { getStoredToken } from './auth-token';
 import type {
@@ -913,7 +913,7 @@ export async function replanTask(
 // ── Recurring Task Schedules ──────────────────────────────────────────────────
 //
 // All schedule-related types are re-exported from `./types` (which
-// re-exports them from `@openaidy/shared-types`). Do NOT redeclare them
+// re-exports them from `@aidyagent/shared-types`). Do NOT redeclare them
 // here — the API contract and the web client share the same source.
 export type {
   ScheduleInput,

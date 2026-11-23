@@ -2,7 +2,7 @@
  * MCP Server Routes
  *
  * REST API endpoints for MCP server lifecycle management:
- * - Config CRUD (stored in config/openaidy.json)
+ * - Config CRUD (stored in config/aidy.json)
  * - Runtime connect/disconnect
  * - Tool discovery
  * - One-shot inline-secret migration (issue #401)
@@ -14,14 +14,14 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { McpClientService } from '../mcp/client';
 import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { McpServerConfig, McpSecretValue } from '@openaidy/config';
+import type { McpServerConfig, McpSecretValue } from '@aidyagent/config';
 import {
   type McpToolWithSchema,
   type McpCatalogEntry,
   type InstallMcpCatalogEntryRequest,
   type CreateMcpServerRequest,
   type UpdateMcpServerRequest,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { requireAuth } from '../middleware/require-auth';
 import {
   toMcpServerRecord,
@@ -120,14 +120,14 @@ function authSecretRecord(
 
 /**
  * HTML returned to the sign-in popup. It reports the outcome to the window
- * that opened it (only if that window is on `origin`, the OpenAidy UI) and
+ * that opened it (only if that window is on `origin`, the Aidy UI) and
  * closes itself; the text is a fallback for when there is no opener.
  */
 function oauthResultPage(
   origin: string | null,
   result: { serverId: string | null; success: boolean; error?: string },
 ): string {
-  const message = JSON.stringify({ type: 'openaidy:mcp-oauth', ...result })
+  const message = JSON.stringify({ type: 'aidy:mcp-oauth', ...result })
     // Keep the payload inert inside the <script> element.
     .replace(/</g, '\\u003c');
   const text = result.success
@@ -140,7 +140,7 @@ function oauthResultPage(
   const notify = origin
     ? `if (window.opener) { window.opener.postMessage(${message}, ${JSON.stringify(origin)}); window.close(); }`
     : '';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>OpenAidy</title></head><body style="font-family:system-ui,sans-serif;padding:2rem"><p>${escapedText}</p><script>${notify}</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Aidy</title></head><body style="font-family:system-ui,sans-serif;padding:2rem"><p>${escapedText}</p><script>${notify}</script></body></html>`;
 }
 
 /**
@@ -172,7 +172,7 @@ function ensureInlineEncryptionAvailable(): InlineEncryptionCheck {
     ensureEncryptionKey();
     // Round-trip a probe value — catches cases where the master key exists
     // but AES-256-GCM is unavailable (e.g. a stripped Node build).
-    const probe = encryptSecret('__openaidy_probe__');
+    const probe = encryptSecret('__aidy_probe__');
     if (!isEncryptedSecret(probe)) {
       return {
         ok: false,
@@ -190,7 +190,7 @@ function ensureInlineEncryptionAvailable(): InlineEncryptionCheck {
       error: 'ENCRYPTION_UNAVAILABLE',
       message: `Could not initialise at-rest encryption for inline MCP secrets: ${
         error instanceof Error ? error.message : String(error)
-      }. Set CREDENTIALS_MASTER_KEY or ensure OPENAIDY_HOME is writable.`,
+      }. Set CREDENTIALS_MASTER_KEY or ensure AIDY_HOME is writable.`,
     };
   }
 }
@@ -394,7 +394,7 @@ export async function registerMcpRoutes(
    * GET /mcp/oauth/callback
    *
    * Where the authorization server sends the browser after sign-in. Public
-   * (the popup carries no OpenAidy credentials); the single-use `state`
+   * (the popup carries no Aidy credentials); the single-use `state`
    * issued by /oauth/start is what ties the request to a server. Exchanges
    * the code for tokens, connects the server, and reports back to the UI.
    */
@@ -476,7 +476,7 @@ export async function registerMcpRoutes(
      * POST /mcp/servers
      *
      * Add a new MCP server config and connect to it.
-     * The config is persisted to config/openaidy.json.
+     * The config is persisted to config/aidy.json.
      */
     authRequired.post<{
       Body: { config: CreateMcpServerRequest };
@@ -724,7 +724,7 @@ export async function registerMcpRoutes(
      * — re-running on an already-migrated config is a no-op. With
      * `dryRun: true` returns the plan without writing.
      *
-     * Wired to the `openaidy mcp migrate-secrets` CLI command and also
+     * Wired to the `aidy mcp migrate-secrets` CLI command and also
      * callable by any admin tool. Returns the per-server plan so the CLI
      * can show what changed.
      */
@@ -1266,7 +1266,7 @@ export async function registerMcpRoutes(
     /**
      * POST /mcp/servers/:id/oauth/start
      *
-     * Begin OAuth sign-in. `origin` is the browser origin of the OpenAidy
+     * Begin OAuth sign-in. `origin` is the browser origin of the Aidy
      * UI; the callback URL is built on it so the redirect returns to the
      * same host. Returns the URL to open in a popup, or `authorized` when no
      * browser step is needed.

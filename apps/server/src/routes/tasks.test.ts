@@ -6,7 +6,7 @@ import type {
   TaskWithDetails,
   KanbanBoard,
 } from '../tasks/service';
-import type { Task } from '@openaidy/db';
+import type { Task } from '@aidyagent/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 
 const mockAuthMiddleware = {

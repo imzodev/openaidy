@@ -5,8 +5,8 @@
 When a task is created with "Enable planning mode" enabled, the planning agent currently decomposes tasks into subtasks without assigning agents. The goal is to have the planning agent:
 
 1. **Read AGENT.md files** from each agent's workspace to understand their specialization
-   - Path: `OPENAIDY_HOME/.openaidy/workspaces/{agentId}/AGENT.md`
-2. **Read agent capabilities** (tools, skills) from openaidy.json configuration
+   - Path: `AIDY_HOME/.aidy/workspaces/{agentId}/AGENT.md`
+2. **Read agent capabilities** (tools, skills) from aidy.json configuration
 3. **Automatically assign** the best agent to each subtask based on AI analysis
 
 ## Current Architecture
@@ -95,14 +95,14 @@ import path from 'path';
  */
 export function buildAgentContextPrompt(
   agents: AgentSummary[],
-  openAidyHome: string,
+  aidyHome: string,
 ): string {
   const agentProfiles = agents.map((agent) => {
     // Read AGENT.md if exists
     let agentMdContent = '';
     const agentMdPath = path.join(
-      openAidyHome,
-      '.openaidy',
+      aidyHome,
+      '.aidy',
       'workspaces',
       agent.id,
       'AGENT.md',
@@ -180,7 +180,7 @@ Modify `planTask()` and `createSubtasks()`:
 const agents = this.agents?.listAllAgents() || [];
 const agentContext =
   agents.length > 0
-    ? buildAgentContextPrompt(agents, process.env.OPENAIDY_HOME || '')
+    ? buildAgentContextPrompt(agents, process.env.AIDY_HOME || '')
     : undefined;
 
 // Build prompt with agent context
@@ -254,14 +254,14 @@ Display the assigned agent name:
 // In prompts.ts or a new utility file
 function readAgentDescriptions(
   agentIds: string[],
-  openAidyHome: string,
+  aidyHome: string,
 ): Map<string, string> {
   const descriptions = new Map<string, string>();
 
   for (const agentId of agentIds) {
     const agentMdPath = path.join(
-      openAidyHome,
-      '.openaidy',
+      aidyHome,
+      '.aidy',
       'workspaces',
       agentId,
       'AGENT.md',
@@ -301,6 +301,6 @@ function readAgentDescriptions(
 ## Edge Cases
 
 - **No agents available**: Planning should still work, just without assignments
-- **AGENT.md missing**: Use only tools/skills from openaidy.json
+- **AGENT.md missing**: Use only tools/skills from aidy.json
 - **Invalid assignedAgentId**: Log warning, don't assign, continue planning
 - **LLM doesn't assign**: Some subtasks may have no assignment (optional field)

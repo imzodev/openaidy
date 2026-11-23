@@ -56,7 +56,7 @@ const DOC_STRUCTURE: DocEntry[] = [
     ],
   },
   {
-    title: 'Operating OpenAidy',
+    title: 'Operating Aidy',
     children: [
       { title: 'Configuration', slug: 'config' },
       { title: 'Access Tokens & Device Pairing', slug: 'access-tokens' },
@@ -207,19 +207,19 @@ export default function Docs() {
   return (
     <div className="docs-layout">
       <Helmet>
-        <title>{docTitle} — OpenAidy Docs</title>
+        <title>{docTitle} — Aidy Docs</title>
         <meta
           name="description"
-          content={meta.summary || `${docTitle} — OpenAidy documentation`}
+          content={meta.summary || `${docTitle} — Aidy documentation`}
         />
-        <meta property="og:title" content={`${docTitle} — OpenAidy Docs`} />
+        <meta property="og:title" content={`${docTitle} — Aidy Docs`} />
         <meta property="og:description" content={meta.summary || ''} />
       </Helmet>
 
       {/* Mobile header */}
       <div className="docs-mobile-header">
         <Link to="/" className="docs-logo">
-          Open<span>Aidy</span>
+          <span>Aidy</span>
         </Link>
         <button
           className="docs-mobile-menu-btn"

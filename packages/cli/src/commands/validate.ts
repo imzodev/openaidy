@@ -77,12 +77,12 @@ export async function validateAddon(
     warnings.push('Manifest missing recommended field: description');
   }
 
-  if (!manifest.openaidy) {
-    errors.push('Manifest missing required field: openaidy');
-  } else if (typeof manifest.openaidy === 'object') {
-    const openaidy = manifest.openaidy as Record<string, unknown>;
-    if (!openaidy.minVersion) {
-      warnings.push('openaidy.minVersion not specified');
+  if (!manifest.aidy) {
+    errors.push('Manifest missing required field: aidy');
+  } else if (typeof manifest.aidy === 'object') {
+    const aidy = manifest.aidy as Record<string, unknown>;
+    if (!aidy.minVersion) {
+      warnings.push('aidy.minVersion not specified');
     }
   }
 
@@ -138,7 +138,7 @@ async function validatePackageStructure(projectPath: string): Promise<{
   const distPath = path.join(projectPath, 'dist');
   if (!fs.existsSync(distPath)) {
     errors.push(
-      'dist directory not found. Run "openaidy build" before publishing.',
+      'dist directory not found. Run "aidy build" before publishing.',
     );
   } else {
     // Check for entry point in dist

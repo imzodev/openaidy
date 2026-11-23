@@ -4,13 +4,13 @@ import { fileURLToPath } from 'node:url';
 vi.mock('../lib/env', () => ({
   env: (() => {
     const appConfigPath = fileURLToPath(
-      new URL('../../../.openaidy/test-auth-config.json', import.meta.url),
+      new URL('../../../.aidy/test-auth-config.json', import.meta.url),
     );
     const appConfigTemplatePath = fileURLToPath(
-      new URL('../../../../config/openaidy.template.json', import.meta.url),
+      new URL('../../../../config/aidy.template.json', import.meta.url),
     );
     const bootstrapAdminTokenPath = fileURLToPath(
-      new URL('../../../.openaidy/test-bootstrap-admin.json', import.meta.url),
+      new URL('../../../.aidy/test-bootstrap-admin.json', import.meta.url),
     );
 
     return {
@@ -20,14 +20,12 @@ vi.mock('../lib/env', () => ({
       DB_KIND: 'disabled',
       DATABASE_URL: undefined,
       SQLITE_PATH: undefined,
-      OPENAIDY_HOME: fileURLToPath(
-        new URL('../../../.openaidy', import.meta.url),
-      ),
+      AIDY_HOME: fileURLToPath(new URL('../../../.aidy', import.meta.url)),
       APP_CONFIG_PATH: appConfigPath,
       APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
       LOG_LEVEL: 'silent',
       WORKSPACE_BASE_DIR: fileURLToPath(
-        new URL('../../../.openaidy/workspaces', import.meta.url),
+        new URL('../../../.aidy/workspaces', import.meta.url),
       ),
       BOOTSTRAP_ADMIN_ENABLED: true,
       BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapAdminTokenPath,

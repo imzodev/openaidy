@@ -1,7 +1,7 @@
 ---
-summary: 'Connect OpenAidy to messaging channels so agents can receive and reply to real conversations'
+summary: 'Connect Aidy to messaging channels so agents can receive and reply to real conversations'
 read_when:
-  - You want to connect WhatsApp or Discord to OpenAidy
+  - You want to connect WhatsApp or Discord to Aidy
   - You need to understand how channel routing, allowlists, and authentication work
   - You are setting up inbound message handling and outbound reply delivery
 title: 'Channels'
@@ -9,18 +9,18 @@ title: 'Channels'
 
 # Channels
 
-Channels let OpenAidy agents receive and reply to real conversations on messaging platforms. Instead of only using the web UI, you can connect a channel so messages from WhatsApp, Discord, or other platforms create or resume sessions and trigger agent responses.
+Channels let Aidy agents receive and reply to real conversations on messaging platforms. Instead of only using the web UI, you can connect a channel so messages from WhatsApp, Discord, or other platforms create or resume sessions and trigger agent responses.
 
 Channels are purely reactive today: they listen for inbound messages and reply with whatever the configured agent produces. There's currently no way to have an addon or tool push an outbound message on demand outside of that inbound-reply cycle.
 
-## How channels work in OpenAidy
+## How channels work in Aidy
 
 Each channel is configured through the plugin-style channel API. The core knows only about channel capabilities and transport-neutral events — channel-specific logic lives inside each channel implementation.
 
 When a channel receives a message:
 
 1. The channel plugin normalizes it to a core message envelope
-2. OpenAidy finds or creates the session associated with that sender
+2. Aidy finds or creates the session associated with that sender
 3. The message is submitted to the agent
 4. The agent's response is sent back through the same channel
 
@@ -35,7 +35,7 @@ Both are built on the same plugin interface, so adding another channel doesn't r
 
 ### Step 1: Configure the channel
 
-Add a channel entry to your `openaidy.json` config:
+Add a channel entry to your `aidy.json` config:
 
 ```json
 {
@@ -69,11 +69,11 @@ Once connected, the status changes from QR to Connected.
 
 ### Step 3: Test it
 
-Send a message from the allowed phone number to your WhatsApp number. OpenAidy will create a session, forward the message to the agent, and reply with the agent's response.
+Send a message from the allowed phone number to your WhatsApp number. Aidy will create a session, forward the message to the agent, and reply with the agent's response.
 
 ## Connecting Discord
 
-Add a channel entry to your `openaidy.json` config:
+Add a channel entry to your `aidy.json` config:
 
 ```json
 {

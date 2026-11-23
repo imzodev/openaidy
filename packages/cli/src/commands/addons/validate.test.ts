@@ -38,7 +38,7 @@ const MANIFEST = {
   id: 'my-addon',
   name: 'My Addon',
   version: '1.0.0',
-  openaidy: { minVersion: '1.0.0' },
+  aidy: { minVersion: '1.0.0' },
 };
 
 beforeEach(() => {
@@ -106,7 +106,7 @@ describe('addonValidateHandler', () => {
         name: 'My Addon',
         version: '1.0.0',
         description: 'A test addon',
-        openaidy: { minVersion: '1.0.0' },
+        aidy: { minVersion: '1.0.0' },
       });
       await addonValidateHandler([]);
       expect(mockClack.log.error).toHaveBeenCalled();

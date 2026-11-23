@@ -38,7 +38,7 @@ export type {
   // Pulse types from shared-types — single source of truth.
   ScheduleInput,
   // Recurring task schedules (Phase 6). These mirror the
-  // @openaidy/shared-types/task-schedules.ts DTOs — the web client
+  // @aidyagent/shared-types/task-schedules.ts DTOs — the web client
   // does NOT redeclare them.
   SchedulePreset,
   TaskScheduleStatus,
@@ -78,7 +78,7 @@ export type {
   // Structured agent visual identity — single source of truth.
   AgentIdentity,
   AgentIdentityAsset,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 import type {
   SessionMessage as SharedSessionMessage,
@@ -86,7 +86,7 @@ import type {
   SessionRun as SharedSessionRun,
   SessionMessageAttachment,
   AgentIdentity,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // Attachment metadata on a session message. Declared in shared-types
 // (single source of truth) and re-exported so existing './types' imports
@@ -138,7 +138,7 @@ export type Agent = {
   tags?: string[];
   tools?: string[];
   skills?: string[];
-  mcpServers?: import('@openaidy/shared-types').McpServerRef[];
+  mcpServers?: import('@aidyagent/shared-types').McpServerRef[];
   defaults: {
     providerId?: string;
     modelId?: string;
@@ -379,7 +379,7 @@ export type AppDefaults = {
 };
 
 /**
- * Who OpenAidy works for and how to reach them. Mirrors
+ * Who Aidy works for and how to reach them. Mirrors
  * `ownerConfigSchema` in packages/config/src/app-config.ts.
  */
 export type OwnerConfig = {
@@ -708,7 +708,7 @@ export type PulseRun = {
 export type {
   CreatePulseInput as CreatePulseBody,
   UpdatePulseInput as UpdatePulseBody,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Build / runtime info exposed by GET /api/info.

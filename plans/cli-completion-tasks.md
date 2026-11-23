@@ -19,7 +19,7 @@ Add workspace dependencies so the CLI can import control-plane workflows, the SD
 
 ```json
 "dependencies": {
-  "@openaidy/server": "workspace:*"
+  "@aidyagent/server": "workspace:*"
 }
 ```
 
@@ -27,10 +27,10 @@ Add workspace dependencies so the CLI can import control-plane workflows, the SD
 
 ```json
 "dependencies": {
-  "@openaidy/server": "workspace:*",
-  "@openaidy/control-plane": "workspace:*",
-  "@openaidy/sdk": "workspace:*",
-  "@openaidy/config": "workspace:*"
+  "@aidyagent/server": "workspace:*",
+  "@aidyagent/control-plane": "workspace:*",
+  "@aidyagent/sdk": "workspace:*",
+  "@aidyagent/config": "workspace:*"
 }
 ```
 
@@ -60,7 +60,7 @@ Create a shared utility that the `devices *` commands use to connect to the WebS
 
 A helper that:
 
-1. Reads the bootstrap-admin token from `.openaidy/credentials/bootstrap-admin.json`
+1. Reads the bootstrap-admin token from `.aidy/credentials/bootstrap-admin.json`
 2. Resolves the WebSocket URL from env or config
 3. Creates and connects a `WebSocketClient` instance
 4. Returns the connected client for command use
@@ -77,12 +77,12 @@ A helper that:
 ### Pseudocode
 
 ```typescript
-import { WebSocketClient } from '@openaidy/sdk';
+import { WebSocketClient } from '@aidyagent/sdk';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const DEFAULT_WS_URL = 'ws://localhost:3001/ws';
-const DEFAULT_TOKEN_PATH = '.openaidy/credentials/bootstrap-admin.json';
+const DEFAULT_TOKEN_PATH = '.aidy/credentials/bootstrap-admin.json';
 
 export type ServerClientResult =
   | { ok: true; client: WebSocketClient; token: string }
@@ -113,7 +113,7 @@ export async function connectToServer(options?: {
   }
 
   // 3. Resolve WS URL
-  const wsUrl = options?.wsUrl ?? process.env.OPENAIDY_WS_URL ?? DEFAULT_WS_URL;
+  const wsUrl = options?.wsUrl ?? process.env.AIDY_WS_URL ?? DEFAULT_WS_URL;
 
   // 4. Create and connect client
   const client = new WebSocketClient({ url: wsUrl, token: record.token });
@@ -151,7 +151,7 @@ Replace the hardcoded stub with a call to `BootstrapAdminWorkflow.inspectToken()
 
 ### Current Behavior
 
-Returns hardcoded: `"Status: missing\nPath: .openaidy/credentials/bootstrap-admin.json\nEnabled: true\nError: Token file not found"`
+Returns hardcoded: `"Status: missing\nPath: .aidy/credentials/bootstrap-admin.json\nEnabled: true\nError: Token file not found"`
 
 ### Expected Result
 
@@ -170,12 +170,12 @@ Returns hardcoded: `"Status: missing\nPath: .openaidy/credentials/bootstrap-admi
 ### Implementation Pattern
 
 ```typescript
-import { createBootstrapAdminWorkflow } from '@openaidy/control-plane';
+import { createBootstrapAdminWorkflow } from '@aidyagent/control-plane';
 
 // Inside the 'admin token show' handler:
 const workflow = createBootstrapAdminWorkflow({
   enabled: true, // from config
-  tokenPath: '.openaidy/credentials/bootstrap-admin.json', // from config
+  tokenPath: '.aidy/credentials/bootstrap-admin.json', // from config
   jwtSecret: process.env.WS_TOKEN_SECRET ?? 'change-me-in-production',
 });
 
@@ -208,7 +208,7 @@ return {
 
 ### Config Resolution
 
-The `tokenPath` and `enabled` values should come from env or `@openaidy/config`. See:
+The `tokenPath` and `enabled` values should come from env or `@aidyagent/config`. See:
 
 - [`packages/config/src/env.ts`](packages/config/src/env.ts) — env parsing
 - [`apps/server/src/lib/env.ts`](apps/server/src/lib/env.ts) — server env vars including `WS_TOKEN_SECRET`
@@ -274,7 +274,7 @@ Replace hardcoded path with config-resolved path.
 
 ### Current Behavior
 
-Returns hardcoded `'.openaidy/credentials/bootstrap-admin.json'`
+Returns hardcoded `'.aidy/credentials/bootstrap-admin.json'`
 
 ### Expected Result
 
@@ -284,7 +284,7 @@ Returns hardcoded `'.openaidy/credentials/bootstrap-admin.json'`
 ### Reusable Code
 
 - Share the `resolveTokenPath()` helper from Task 3/4
-- Or use `@openaidy/config` if it exposes token path configuration
+- Or use `@aidyagent/config` if it exposes token path configuration
 
 ---
 
@@ -536,8 +536,8 @@ Provide a way for the CLI to discover the WebSocket server URL.
 
 Resolution order:
 
-1. `OPENAIDY_WS_URL` env var (explicit override)
-2. Config from `@openaidy/config` (if it exposes WS settings)
+1. `AIDY_WS_URL` env var (explicit override)
+2. Config from `@aidyagent/config` (if it exposes WS settings)
 3. Default: `ws://localhost:3001/ws`
 
 ### Related Files

@@ -69,14 +69,14 @@ export function AddonsPage(props: AddonsPageProps) {
       const enabledWithoutToken = data.addons.filter(
         (a) =>
           a.status === 'enabled' &&
-          !localStorage.getItem(`openaidy_addon_token:${a.addonId}`),
+          !localStorage.getItem(`aidy_addon_token:${a.addonId}`),
       );
       await Promise.all(
         enabledWithoutToken.map(async (addon) => {
           try {
             const result = await refreshAddonToken(token(), addon.addonId);
             localStorage.setItem(
-              `openaidy_addon_token:${addon.addonId}`,
+              `aidy_addon_token:${addon.addonId}`,
               result.accessToken,
             );
           } catch {
@@ -105,7 +105,7 @@ export function AddonsPage(props: AddonsPageProps) {
         addon.permissions ?? [],
       );
       localStorage.setItem(
-        `openaidy_addon_token:${addon.addonId}`,
+        `aidy_addon_token:${addon.addonId}`,
         result.accessToken,
       );
       setAddons((prev) =>
@@ -126,7 +126,7 @@ export function AddonsPage(props: AddonsPageProps) {
     setActionError(null);
     try {
       const result = await disableAddon(token(), addon.addonId);
-      localStorage.removeItem(`openaidy_addon_token:${addon.addonId}`);
+      localStorage.removeItem(`aidy_addon_token:${addon.addonId}`);
       setAddons((prev) =>
         prev.map((a) => (a.id === addon.id ? result.addon : a)),
       );
@@ -146,7 +146,7 @@ export function AddonsPage(props: AddonsPageProps) {
     setActionError(null);
     try {
       await uninstallAddon(token(), addon.addonId);
-      localStorage.removeItem(`openaidy_addon_token:${addon.addonId}`);
+      localStorage.removeItem(`aidy_addon_token:${addon.addonId}`);
       setAddons((prev) => prev.filter((a) => a.id !== addon.id));
       props.onAddonChange?.();
     } catch (err) {
@@ -161,7 +161,7 @@ export function AddonsPage(props: AddonsPageProps) {
   return (
     <Layout
       title="Addons"
-      description="Extend OpenAidy with addons"
+      description="Extend Aidy with addons"
       actions={
         <button
           onClick={() => void load()}
@@ -213,7 +213,7 @@ export function AddonsPage(props: AddonsPageProps) {
           <p class="text-text-secondary font-medium">No addons installed</p>
           <div class="mt-3 text-left bg-gray-50 dark:bg-gray-800 border border-border rounded-lg p-4 text-xs font-mono text-text-secondary space-y-1 max-w-sm">
             <p># scaffold, register, and enable in one step</p>
-            <p>pnpm openaidy addon create my-addon</p>
+            <p>pnpm aidy addon create my-addon</p>
           </div>
         </div>
       </Show>

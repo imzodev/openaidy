@@ -2,11 +2,11 @@
  * Tests for the shared JWT-secret resolution helper.
  *
  * The bug being prevented: if `WS_TOKEN_SECRET` is unset on a manual
- * `openaidy start`, the server falls back to the unsafe default secret
+ * `aidy start`, the server falls back to the unsafe default secret
  * and `BootstrapAdminManager.ensureToken()` regenerates the admin JWT
  * (because signature validation fails against the old secret), silently
  * logging the user out of the UI. The install script persists the secret
- * to `$OPENAIDY_HOME/state/install.json`; both the CLI and the server
+ * to `$AIDY_HOME/state/install.json`; both the CLI and the server
  * must read from there as a fallback.
  */
 
@@ -24,7 +24,7 @@ describe('readJwtSecretFromState', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-jwt-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-jwt-'));
   });
 
   afterEach(() => {
@@ -91,7 +91,7 @@ describe('resolveJwtSecret', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-jwt-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-jwt-'));
   });
 
   afterEach(() => {

@@ -1,7 +1,7 @@
 /**
  * process-manager.ts — PID file helpers, process liveness, port probing (PR2 T2.1)
  *
- * Cross-platform utilities for managing the OpenAidy server child process.
+ * Cross-platform utilities for managing the Aidy server child process.
  * All file operations use atomic tmp+rename to prevent partial writes.
  *
  * Exports:

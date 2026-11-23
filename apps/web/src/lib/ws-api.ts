@@ -1,5 +1,5 @@
-import type { WebSocketClient } from '@openaidy/sdk';
-import type { MessagePage } from '@openaidy/shared-types';
+import type { WebSocketClient } from '@aidyagent/sdk';
+import type { MessagePage } from '@aidyagent/shared-types';
 import {
   listSessions as listSessionsRest,
   createSession as createSessionRest,

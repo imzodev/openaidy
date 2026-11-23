@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
-import type { SkillLoadError } from '@openaidy/shared-types';
+import type { SkillLoadError } from '@aidyagent/shared-types';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { SkillRegistry } from '../skills';

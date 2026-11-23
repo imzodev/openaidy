@@ -19,7 +19,7 @@ import {
   type MessageRole,
   type RunStatus,
   type FinishReason,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // Re-export types from shared-types (types don't exist at runtime, only values do)
 export type {

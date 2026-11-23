@@ -43,7 +43,7 @@ export default function Navbar() {
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       >
         <Link to="/" className="navbar-logo" onClick={closeMobile}>
-          <img src="/logo.webp" alt="OpenAidy" className="navbar-logo-img" />
+          <img src="/logo.webp" alt="Aidy" className="navbar-logo-img" />
         </Link>
 
         <div className="navbar-links">
@@ -81,7 +81,7 @@ export default function Navbar() {
             Docs
           </Link>
           <a
-            href="https://github.com/imzodev/openaidy"
+            href="https://github.com/imzodev/aidy"
             target="_blank"
             rel="noopener noreferrer"
             className="navbar-link"
@@ -138,7 +138,7 @@ export default function Navbar() {
               Docs
             </Link>
             <a
-              href="https://github.com/imzodev/openaidy"
+              href="https://github.com/imzodev/aidy"
               target="_blank"
               rel="noopener noreferrer"
               className="mobile-link"

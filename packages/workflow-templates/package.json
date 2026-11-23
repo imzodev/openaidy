@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/workflow-templates",
+  "name": "@aidyagent/workflow-templates",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,6 +11,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@openaidy/shared-types": "workspace:*"
+    "@aidyagent/shared-types": "workspace:*"
   }
 }

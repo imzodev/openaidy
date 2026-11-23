@@ -10,7 +10,7 @@ import path from 'node:path';
 export interface DevServerOptions {
   port?: number;
   host?: string;
-  openaidyUrl?: string;
+  aidyUrl?: string;
   proxyEnabled?: boolean;
   watchPaths?: string[];
 }
@@ -37,7 +37,7 @@ export interface ServerState {
 const DEFAULT_OPTIONS: Required<DevServerOptions> = {
   port: 3000,
   host: 'localhost',
-  openaidyUrl: 'http://localhost:8080',
+  aidyUrl: 'http://localhost:8080',
   proxyEnabled: true,
   watchPaths: ['src/**/*', 'tests/**/*'],
 };
@@ -65,12 +65,12 @@ export function createServerConfig(options: DevServerOptions = {}): {
     proxy: merged.proxyEnabled
       ? {
           '/api': {
-            target: merged.openaidyUrl,
+            target: merged.aidyUrl,
             changeOrigin: true,
             rewrite: (path: string) => path.replace(/^\/api/, ''),
           },
           '/ws': {
-            target: merged.openaidyUrl,
+            target: merged.aidyUrl,
             ws: true,
           },
         }
@@ -108,7 +108,7 @@ export async function startDevServer(
     return {
       success: false,
       message:
-        'addon.json not found. Run "openaidy init" to initialize the project.',
+        'addon.json not found. Run "aidy init" to initialize the project.',
       port: 0,
       host: '',
       url: '',
@@ -239,11 +239,11 @@ export function validateServerConfig(options: DevServerOptions): {
     }
   }
 
-  if (options.openaidyUrl !== undefined) {
+  if (options.aidyUrl !== undefined) {
     try {
-      new URL(options.openaidyUrl);
+      new URL(options.aidyUrl);
     } catch {
-      errors.push('Invalid OpenAidy URL format');
+      errors.push('Invalid Aidy URL format');
     }
   }
 
@@ -274,10 +274,7 @@ export function getHMRConfig(): Record<string, unknown> {
 /**
  * Generate vite config for development
  */
-export function generateViteConfig(
-  addonId: string,
-  openaidyUrl: string,
-): string {
+export function generateViteConfig(addonId: string, aidyUrl: string): string {
   return JSON.stringify(
     {
       server: {
@@ -285,11 +282,11 @@ export function generateViteConfig(
         host: 'localhost',
         proxy: {
           '/api': {
-            target: openaidyUrl,
+            target: aidyUrl,
             changeOrigin: true,
           },
           '/ws': {
-            target: openaidyUrl,
+            target: aidyUrl,
             ws: true,
           },
         },

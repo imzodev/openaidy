@@ -7,7 +7,7 @@ import {
   parseVersion,
   compareVersions,
   satisfiesVersion,
-  checkOpenaidyCompatibility,
+  checkAidyCompatibility,
   isBreakingChange,
   getUpdateType,
   VersionManager,
@@ -98,21 +98,21 @@ describe('Version Manager', () => {
     });
   });
 
-  describe('checkOpenaidyCompatibility', () => {
+  describe('checkAidyCompatibility', () => {
     it('should return compatible for matching versions', () => {
-      const result = checkOpenaidyCompatibility('1.0.0', '2.0.0', '1.5.0');
+      const result = checkAidyCompatibility('1.0.0', '2.0.0', '1.5.0');
       expect(result.compatible).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
 
     it('should detect incompatible minimum version', () => {
-      const result = checkOpenaidyCompatibility('2.0.0', '3.0.0', '1.5.0');
+      const result = checkAidyCompatibility('2.0.0', '3.0.0', '1.5.0');
       expect(result.compatible).toBe(false);
       expect(result.errors.some((e) => e.includes('below minimum'))).toBe(true);
     });
 
     it('should detect incompatible maximum version', () => {
-      const result = checkOpenaidyCompatibility('1.0.0', '1.5.0', '2.0.0');
+      const result = checkAidyCompatibility('1.0.0', '1.5.0', '2.0.0');
       expect(result.compatible).toBe(false);
       expect(result.errors.some((e) => e.includes('exceeds maximum'))).toBe(
         true,
@@ -149,8 +149,8 @@ describe('Version Manager', () => {
         semantic: { major: 1, minor: 0, patch: 0 },
         changelog: 'Initial release',
         releaseDate: new Date(),
-        minOpenaidyVersion: '1.0.0',
-        maxOpenaidyVersion: '2.0.0',
+        minAidyVersion: '1.0.0',
+        maxAidyVersion: '2.0.0',
         breaking: false,
         dependencies: [],
       });
@@ -166,8 +166,8 @@ describe('Version Manager', () => {
         semantic: { major: 2, minor: 0, patch: 0 },
         changelog: 'Major update',
         releaseDate: new Date(),
-        minOpenaidyVersion: '1.0.0',
-        maxOpenaidyVersion: '2.0.0',
+        minAidyVersion: '1.0.0',
+        maxAidyVersion: '2.0.0',
         breaking: true,
         dependencies: [],
       });

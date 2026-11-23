@@ -19,7 +19,7 @@ import {
   type ErrorResponse,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mock Factories
@@ -195,11 +195,11 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   config: {
     get: vi.fn().mockResolvedValue({
-      app: { name: 'OpenAidy', version: '1.0.0' },
+      app: { name: 'Aidy', version: '1.0.0' },
       server: { port: 3000 },
     }),
     getConfig: vi.fn().mockReturnValue({
-      app: { name: 'OpenAidy', version: '1.0.0' },
+      app: { name: 'Aidy', version: '1.0.0' },
       server: { port: 3000 },
     }),
     set: vi.fn().mockResolvedValue(undefined),

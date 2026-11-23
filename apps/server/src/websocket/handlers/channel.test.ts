@@ -12,7 +12,7 @@ import type {
   ChannelSubscribeRequest,
   ChannelUnsubscribeRequest,
   WSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mocks

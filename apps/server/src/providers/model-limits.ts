@@ -3,7 +3,7 @@ import {
   OPENCODE_ZEN_PRESET,
   PROVIDER_PRESETS,
   type ModelPreset,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 const ALL_PRESETS = [
   ...PROVIDER_PRESETS,

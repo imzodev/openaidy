@@ -1,27 +1,23 @@
 /**
  * Agents Delete Command Handler
  *
- * Implements `openaidy agents delete` command.
- * Removes an agent from openaidy.json after the user confirms by typing the agent ID.
+ * Implements `aidy agents delete` command.
+ * Removes an agent from aidy.json after the user confirms by typing the agent ID.
  */
 
 import * as p from '@clack/prompts';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type {
-  CommandResult,
-  AgentConfig,
-  OpenAidyConfig,
-} from '../../types.js';
+import type { CommandResult, AgentConfig, AidyConfig } from '../../types.js';
 
 function resolveConfigPath(): string {
-  return resolve(process.env.APP_CONFIG_PATH ?? '.openaidy/openaidy.json');
+  return resolve(process.env.APP_CONFIG_PATH ?? '.aidy/aidy.json');
 }
 
 async function readAgentConfigs(): Promise<AgentConfig[]> {
   try {
     const raw = await readFile(resolveConfigPath(), 'utf-8');
-    const config = JSON.parse(raw) as OpenAidyConfig;
+    const config = JSON.parse(raw) as AidyConfig;
     return config.agents ?? [];
   } catch {
     return [];
@@ -33,7 +29,7 @@ export async function agentsDeleteHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy agents delete [<id>]
+      `Usage: aidy agents delete [<id>]
 
 Delete an agent from the configuration. You will be asked to confirm by typing
 the agent ID before anything is removed.
@@ -42,8 +38,8 @@ Options:
   <id>   Agent ID to delete (prompted if omitted)
 
 Examples:
-  openaidy agents delete
-  openaidy agents delete my-agent
+  aidy agents delete
+  aidy agents delete my-agent
 
 Exit Codes:
   0  Agent deleted (or cancelled)

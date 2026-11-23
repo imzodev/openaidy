@@ -4,7 +4,7 @@
  * or `verdict` (verification turns), so tests decide what each agent says.
  */
 
-import type { DatabaseAdapter } from '@openaidy/db';
+import type { DatabaseAdapter } from '@aidyagent/db';
 
 export type Turn = {
   sessionId: string;

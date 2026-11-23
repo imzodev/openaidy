@@ -5,8 +5,12 @@
  * and management.
  */
 
-import { MarketplaceRepository, SearchOptions } from '@openaidy/db';
-import type { MarketplaceAddon, AddonVersion, AddonReview } from '@openaidy/db';
+import { MarketplaceRepository, SearchOptions } from '@aidyagent/db';
+import type {
+  MarketplaceAddon,
+  AddonVersion,
+  AddonReview,
+} from '@aidyagent/db';
 
 export interface PublishAddonInput {
   addonId: string;
@@ -24,8 +28,8 @@ export interface PublishAddonInput {
   iconUrl?: string;
   manifest: Record<string, unknown>;
   version: string;
-  minOpenaidyVersion?: string;
-  maxOpenaidyVersion?: string;
+  minAidyVersion?: string;
+  maxAidyVersion?: string;
 }
 
 export interface PublishVersionInput {
@@ -33,8 +37,8 @@ export interface PublishVersionInput {
   version: string;
   changelog: string;
   manifest: Record<string, unknown>;
-  minOpenaidyVersion: string;
-  maxOpenaidyVersion: string;
+  minAidyVersion: string;
+  maxAidyVersion: string;
   downloadUrl: string;
   fileSize: number;
   checksum: string;
@@ -88,9 +92,9 @@ export class MarketplaceService {
       version: input.version,
       changelog: 'Initial release',
       manifest: input.manifest,
-      minOpenaidyVersion: input.minOpenaidyVersion || '1.0.0',
-      maxOpenaidyVersion: input.maxOpenaidyVersion || '2.0.0',
-      downloadUrl: `https://registry.openaidy.dev/addons/${addon.addonId}/${input.version}`,
+      minAidyVersion: input.minAidyVersion || '1.0.0',
+      maxAidyVersion: input.maxAidyVersion || '2.0.0',
+      downloadUrl: `https://registry.aidyagent.app/addons/${addon.addonId}/${input.version}`,
       fileSize: 0,
       checksum: '',
       status: 'published',
@@ -153,8 +157,8 @@ export class MarketplaceService {
       version: input.version,
       changelog: input.changelog,
       manifest: input.manifest,
-      minOpenaidyVersion: input.minOpenaidyVersion,
-      maxOpenaidyVersion: input.maxOpenaidyVersion,
+      minAidyVersion: input.minAidyVersion,
+      maxAidyVersion: input.maxAidyVersion,
       downloadUrl: input.downloadUrl,
       fileSize: input.fileSize,
       checksum: input.checksum,

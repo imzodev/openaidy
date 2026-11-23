@@ -10,7 +10,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-const SERVICE_NAME: &str = "openaidy";
+const SERVICE_NAME: &str = "aidy";
 
 /// Credential record for IPC responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,12 +61,12 @@ pub async fn delete_credential(account: String) -> Result<(), String> {
     Ok(())
 }
 
-/// List all credential account names (not values) stored under openaidy service.
+/// List all credential account names (not values) stored under aidy service.
 #[tauri::command]
 #[allow(dead_code)]
 pub async fn list_credentials() -> Result<Vec<String>, String> {
     // Note: keyring doesn't support listing without platform-specific APIs.
-    // Maintain a manifest file at OPENAIDY_HOME/.credentials to track stored keys.
+    // Maintain a manifest file at AIDY_HOME/.credentials to track stored keys.
     // This is stored as JSON in the config dir, not the keychain.
     Ok(Vec::new()) // TODO: implement via manifest
 }
@@ -77,8 +77,8 @@ pub async fn get_all_credentials() -> Result<HashMap<String, String>, String> {
     let mut creds = HashMap::new();
 
     // Load from manifest if it exists
-    if let Some(openaidy_home) = dirs::config_dir() {
-        let manifest_path = openaidy_home.join("openaidy").join(".credentials");
+    if let Some(aidy_home) = dirs::config_dir() {
+        let manifest_path = aidy_home.join("aidy").join(".credentials");
         if let Ok(content) = std::fs::read_to_string(&manifest_path) {
             if let Ok(manifest) = serde_json::from_str::<CredentialsManifest>(&content) {
                 for account in &manifest.accounts {
@@ -120,7 +120,7 @@ pub async fn get_all_credentials() -> Result<HashMap<String, String>, String> {
 }
 
 /// Manifest file tracking which credentials are stored.
-/// Stored at ~/.config/openaidy/.credentials
+/// Stored at ~/.config/aidy/.credentials
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CredentialsManifest {
     accounts: Vec<String>,
@@ -129,8 +129,8 @@ struct CredentialsManifest {
 /// Save credential account name to manifest (called after store).
 #[allow(dead_code)]
 pub async fn save_to_manifest(account: &str) -> Result<(), String> {
-    if let Some(openaidy_home) = dirs::config_dir() {
-        let config_dir = openaidy_home.join("openaidy");
+    if let Some(aidy_home) = dirs::config_dir() {
+        let config_dir = aidy_home.join("aidy");
         std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
         let manifest_path = config_dir.join(".credentials");
 
@@ -248,6 +248,6 @@ mod tests {
 
     #[test]
     fn test_service_name_constant() {
-        assert_eq!(SERVICE_NAME, "openaidy");
+        assert_eq!(SERVICE_NAME, "aidy");
     }
 }

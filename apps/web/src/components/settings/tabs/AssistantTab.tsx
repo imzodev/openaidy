@@ -1,5 +1,5 @@
 /**
- * Assistant settings: who OpenAidy works for, where to reach them
+ * Assistant settings: who Aidy works for, where to reach them
  * (WhatsApp etc.), their timezone and quiet hours, whether workflows tell
  * them about approvals and failures, and the daily briefing.
  */
@@ -91,7 +91,7 @@ export function AssistantTab(props: AssistantTabProps) {
     <div class="p-6 space-y-8 max-w-2xl">
       <Section
         title="You"
-        description="Who OpenAidy works for. Agents use this to tell you from your customers, and send briefings, alerts, reminders and approvals here."
+        description="Who Aidy works for. Agents use this to tell you from your customers, and send briefings, alerts, reminders and approvals here."
       >
         <label class="block">
           <span class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">

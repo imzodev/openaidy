@@ -3,7 +3,7 @@ import {
   AGENT_IDENTITY_HEX_COLOR_PATTERN,
   type AgentIdentity,
   type McpServerRef,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Workspace permissions schema
@@ -89,7 +89,7 @@ const HexColorSchema = z
  * Identity avatar asset schema
  *
  * Discriminated union so consumers branch on `kind` instead of inspecting
- * URLs or content-type. See AgentIdentityAsset in @openaidy/shared-types.
+ * URLs or content-type. See AgentIdentityAsset in @aidyagent/shared-types.
  */
 export const IdentityAssetSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -108,7 +108,7 @@ export const IdentityAssetSchema = z.discriminatedUnion('kind', [
  * Identity schema
  *
  * Structured visual identity for an agent: emoji + accent color, with an
- * optional avatar asset override. See AgentIdentity in @openaidy/shared-types.
+ * optional avatar asset override. See AgentIdentity in @aidyagent/shared-types.
  */
 export const IdentitySchema = z.object({
   emoji: z.string().min(1).max(8),
@@ -146,7 +146,7 @@ export const AgentSchema = z.object({
   tools: z.array(z.string()).optional(),
 
   // Skill IDs assigned to this agent.
-  // These are loaded from .openaidy/skills/ and appended to the system prompt at dispatch time.
+  // These are loaded from .aidy/skills/ and appended to the system prompt at dispatch time.
   skills: z.array(z.string()).optional(),
 
   tags: z.array(z.string()).optional(),

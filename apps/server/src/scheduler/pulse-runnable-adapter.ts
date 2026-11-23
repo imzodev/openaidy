@@ -45,14 +45,14 @@ import type {
   ScheduledRunnable,
   ClaimedItem,
   ExecutionResult,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type {
   JobsStore,
   JobRunsStore,
   SessionsStore,
   ScheduledJob,
   JobRun,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { SessionMessageService } from '../sessions/service';
 import type { GenericLogger } from './service';
 import { calculateNextRun } from './cron-utils';

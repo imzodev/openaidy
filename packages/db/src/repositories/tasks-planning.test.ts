@@ -24,7 +24,7 @@ import { createDatabaseClient, type DatabaseConnection } from '../client';
 import { TasksRepository } from './tasks';
 
 describe('TasksRepository — planningEnabled round-trip (sqlite)', () => {
-  const dbPath = join(tmpdir(), `openaidy-planning-test-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `aidy-planning-test-${Date.now()}.db`);
   let conn: DatabaseConnection;
   let repo: TasksRepository;
 

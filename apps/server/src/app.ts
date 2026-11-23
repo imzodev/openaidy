@@ -14,7 +14,7 @@ import {
   type PairingRequestsStore,
   type SessionsStore,
   createDatabaseAdapter,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { env } from './lib/env';
 import {
   createLogger,
@@ -29,7 +29,7 @@ import {
 import { refreshAnthropicToken } from './providers/oauth/anthropic';
 import { healthRoutes } from './routes/health';
 import { infoRoutes } from './routes/info';
-import { OPEN_AIDY_VERSION } from './lib/version';
+import { AIDY_VERSION } from './lib/version';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
 import { createAccessTokenService } from './access-tokens/service';
@@ -66,8 +66,8 @@ import { WorkflowTriggerService } from './tasks/triggers/service';
 import { AssistantService } from './assistant/service';
 import { collectBriefingFacts } from './assistant/briefing';
 import { syncBriefing } from './assistant/briefing-sync';
-import type { OwnerConfig } from '@openaidy/config';
-import type { ScheduledJob } from '@openaidy/db';
+import type { OwnerConfig } from '@aidyagent/config';
+import type { ScheduledJob } from '@aidyagent/db';
 import { WorkflowDraftService } from './tasks/drafting/service';
 import { workflowDraftRoutes } from './routes/workflow-drafts';
 import { taskScheduleRoutes } from './routes/task-schedules';
@@ -102,7 +102,7 @@ import { websocketGatewayPlugin, type WebSocketGateway } from './websocket';
 import {
   WORKFLOW_UPDATED_EVENT,
   type WorkflowUpdatedPayload,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
 import { createWorkspaceService } from './workspace';
@@ -318,10 +318,10 @@ export async function buildApp() {
   const mcpOAuth = dbAdapter
     ? new McpOAuthService({
         store: new DbMcpOAuthStore(
-          dbAdapter.client as import('@openaidy/db').DatabaseClient,
+          dbAdapter.client as import('@aidyagent/db').DatabaseClient,
         ),
         flowStates: new DbOAuthStateStore(
-          dbAdapter.client as import('@openaidy/db').DatabaseClient,
+          dbAdapter.client as import('@aidyagent/db').DatabaseClient,
         ),
         resolver: mcpResolver,
       })
@@ -345,20 +345,20 @@ export async function buildApp() {
 
   // Create AddonService early so it can be injected into the builtin tool registry
   const addonManifestValidator = new ManifestValidator();
-  const openAidyVersion = OPEN_AIDY_VERSION;
+  const aidyVersion = AIDY_VERSION;
   const addonService = dbAdapter
     ? createAddonService({
         repository: dbAdapter.repositories.addons,
         validator: addonManifestValidator,
         jwtSecret: env.WS_TOKEN_SECRET,
-        openAidyVersion,
+        aidyVersion,
       })
     : undefined;
 
   // Per-addon SQLite storage engine (lazy connections; shared by the addon
   // proxy routes and the uninstall cleanup path).
   const addonStorageEngine = new AddonStorageEngine(
-    path.join(env.OPENAIDY_HOME, 'addons'),
+    path.join(env.AIDY_HOME, 'addons'),
     DEFAULT_QUOTAS,
     { warn: (message, meta) => log.warn(message, meta) },
   );
@@ -384,7 +384,7 @@ export async function buildApp() {
     exec: execService,
     skills: { registry: skillRegistry },
     addons: {
-      addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+      addonsDir: path.join(env.AIDY_HOME, 'addons'),
       storageEngine: addonStorageEngine,
       ...(addonService ? { addonService } : {}),
     },
@@ -441,11 +441,11 @@ export async function buildApp() {
   const runEvents = new RunEventEmitter();
 
   // Attachment storage (image/audio chat media) — requires the DB for
-  // metadata rows; bytes go under OPENAIDY_HOME/attachments.
+  // metadata rows; bytes go under AIDY_HOME/attachments.
   const attachmentService = dbAdapter
     ? createAttachmentService({
         repository: dbAdapter.repositories.messageAttachments,
-        baseDir: path.join(env.OPENAIDY_HOME, 'attachments'),
+        baseDir: path.join(env.AIDY_HOME, 'attachments'),
       })
     : undefined;
 
@@ -453,7 +453,7 @@ export async function buildApp() {
   // structurally the same as ModelPricing's optional fields but trips
   // exactOptionalPropertyTypes at the call boundary.
   const modelPricingConfig = configService.getConfig().modelPricing as
-    | Record<string, import('@openaidy/shared-types').ModelPricing>
+    | Record<string, import('@aidyagent/shared-types').ModelPricing>
     | undefined;
 
   // Owner, "now", and where scheduled prompts' answers go. Created once
@@ -526,7 +526,7 @@ export async function buildApp() {
   // Create and wire channel registry
   const channelDeps = {
     sessionService,
-    authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
+    authBaseDir: path.join(env.AIDY_HOME, 'channels'),
     logger: pinoLog,
     getWorkflowTriggers: () => workflowTriggerService,
     ...(dbAdapter
@@ -746,28 +746,25 @@ export async function buildApp() {
       });
 
       // Backup export/import (admin-only). Sections map to files/dirs under
-      // OPENAIDY_HOME; paths are resolved from env with sensible fallbacks.
+      // AIDY_HOME; paths are resolved from env with sensible fallbacks.
       // Exports/imports run as background jobs staged under tmp/backups.
       const backupService = createBackupService(
         {
           dbPath:
-            env.SQLITE_PATH ??
-            path.join(env.OPENAIDY_HOME, 'data', 'openaidy.db'),
+            env.SQLITE_PATH ?? path.join(env.AIDY_HOME, 'data', 'aidy.db'),
           configPath:
-            env.APP_CONFIG_PATH ??
-            path.join(env.OPENAIDY_HOME, 'openaidy.json'),
+            env.APP_CONFIG_PATH ?? path.join(env.AIDY_HOME, 'aidy.json'),
           workspacesDir:
-            env.WORKSPACE_BASE_DIR ??
-            path.join(env.OPENAIDY_HOME, 'workspaces'),
-          skillsDir: env.SKILLS_DIR ?? path.join(env.OPENAIDY_HOME, 'skills'),
-          addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+            env.WORKSPACE_BASE_DIR ?? path.join(env.AIDY_HOME, 'workspaces'),
+          skillsDir: env.SKILLS_DIR ?? path.join(env.AIDY_HOME, 'skills'),
+          addonsDir: path.join(env.AIDY_HOME, 'addons'),
         },
-        openAidyVersion,
+        aidyVersion,
         { closeDatabase: closeDatabaseForBackupImport },
       );
       backupJobs = new BackupJobManager({
         service: backupService,
-        tmpDir: path.join(env.OPENAIDY_HOME, 'tmp', 'backups'),
+        tmpDir: path.join(env.AIDY_HOME, 'tmp', 'backups'),
         downloadUrlFor: (id, key) =>
           `/api/backups/exports/${id}/download?key=${key}`,
       });
@@ -776,15 +773,15 @@ export async function buildApp() {
         backupService,
         jobs: backupJobs,
         authMiddleware,
-        restoreRoot: env.OPENAIDY_HOME,
+        restoreRoot: env.AIDY_HOME,
       });
 
       // In-app self-update (admin-only). Checks the npm registry and, for a
-      // packaged global install, runs `npm install -g @openaidy/app@latest`
+      // packaged global install, runs `npm install -g @aidyagent/app@latest`
       // then restarts via the CLI. `canSelfUpdate` auto-detects packaged mode.
       await api.register(updateRoutes, {
         updateService: createUpdateService({
-          currentVersion: openAidyVersion,
+          currentVersion: aidyVersion,
         }),
         authMiddleware,
       });
@@ -801,7 +798,7 @@ export async function buildApp() {
         // With DB_KIND=disabled there is no adapter; provider routes accept
         // `db: undefined` and skip the OAuth/connection endpoints that need it.
         ...(dbAdapter
-          ? { db: dbAdapter.client as import('@openaidy/db').DatabaseClient }
+          ? { db: dbAdapter.client as import('@aidyagent/db').DatabaseClient }
           : {}),
         invalidateCredential,
       });
@@ -1161,25 +1158,25 @@ export async function buildApp() {
       addonsRepository: dbAdapter.repositories.addons,
       authMiddleware,
       jwtSecret: env.WS_TOKEN_SECRET,
-      openAidyVersion,
+      aidyVersion,
       manifestValidator: addonManifestValidator,
       storageEngine: addonStorageEngine,
     });
   }
 
-  // Resolve the web dist path from OPENAIDY_WEB_DIST, falling back to
-  // ${OPENAIDY_REPO}/apps/web/dist. Web serving is opt-in: when neither
+  // Resolve the web dist path from AIDY_WEB_DIST, falling back to
+  // ${AIDY_REPO}/apps/web/dist. Web serving is opt-in: when neither
   // var is set the server only exposes the API + WS — this is what lets
   // the existing test suite boot the app without a built bundle. When a
   // path IS resolved we validate index.html exists and fail loud (rather
   // than silently serving from a wrong directory).
   //
-  // CLI's `openaidy start --integrated` builds the web bundle first and
-  // passes OPENAIDY_WEB_DIST explicitly; for direct server startups
-  // OPENAIDY_REPO is set by install scripts.
+  // CLI's `aidy start --integrated` builds the web bundle first and
+  // passes AIDY_WEB_DIST explicitly; for direct server startups
+  // AIDY_REPO is set by install scripts.
   const webDistPath = resolveWebDistPath(
-    process.env.OPENAIDY_WEB_DIST,
-    process.env.OPENAIDY_REPO,
+    process.env.AIDY_WEB_DIST,
+    process.env.AIDY_REPO,
   );
   if (webDistPath) {
     try {
@@ -1188,7 +1185,7 @@ export async function buildApp() {
       throw new Error(
         `Web bundle not found at ${webDistPath} (missing index.html). ` +
           'Run `pnpm --filter web build` to produce it, or point ' +
-          'OPENAIDY_WEB_DIST at an existing dist directory.',
+          'AIDY_WEB_DIST at an existing dist directory.',
       );
     }
     log.info(`Serving web bundle from ${webDistPath}`);
@@ -1235,9 +1232,9 @@ export async function buildApp() {
     });
   } else {
     log.info(
-      'Web bundle not configured (OPENAIDY_WEB_DIST and OPENAIDY_REPO both ' +
-        'unset). Server exposes API + WS only. Pass --integrated to `openaidy ' +
-        'start`, or set OPENAIDY_WEB_DIST, to serve the web UI.',
+      'Web bundle not configured (AIDY_WEB_DIST and AIDY_REPO both ' +
+        'unset). Server exposes API + WS only. Pass --integrated to `aidy ' +
+        'start`, or set AIDY_WEB_DIST, to serve the web UI.',
     );
   }
 
@@ -1394,8 +1391,8 @@ export async function buildApp() {
 
 /**
  * Resolve the absolute path to the web bundle (apps/web/dist) the server
- * should serve. Uses OPENAIDY_WEB_DIST when set, otherwise falls back to
- * `${OPENAIDY_REPO}/apps/web/dist`. Returns undefined when neither source
+ * should serve. Uses AIDY_WEB_DIST when set, otherwise falls back to
+ * `${AIDY_REPO}/apps/web/dist`. Returns undefined when neither source
  * is configured — callers must treat that as a startup error rather than
  * guessing a random directory.
  */

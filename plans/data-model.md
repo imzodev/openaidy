@@ -1,14 +1,14 @@
 ---
-summary: 'Suggested data model for OpenAidy core services'
+summary: 'Suggested data model for Aidy core services'
 read_when:
-  - You are designing persistence for OpenAidy
+  - You are designing persistence for Aidy
   - You want a starting point for database schema and service boundaries
-title: 'OpenAidy Data Model'
+title: 'Aidy Data Model'
 ---
 
-# OpenAidy Data Model
+# Aidy Data Model
 
-This document proposes a relational data model for OpenAidy. It is intentionally conservative and service-oriented.
+This document proposes a relational data model for Aidy. It is intentionally conservative and service-oriented.
 
 ## Storage recommendations
 

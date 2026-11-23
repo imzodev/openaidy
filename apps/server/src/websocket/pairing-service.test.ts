@@ -8,7 +8,7 @@ import {
   type PairingServiceOptions,
 } from './pairing-service';
 import { AuthMiddleware } from './middleware/auth';
-import type { DevicesStore, PairingRequestsStore } from '@openaidy/db';
+import type { DevicesStore, PairingRequestsStore } from '@aidyagent/db';
 import type { WebSocketConfig } from './types';
 
 // ============================================================================

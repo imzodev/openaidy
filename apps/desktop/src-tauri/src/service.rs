@@ -1,7 +1,7 @@
 //! Core service lifecycle manager.
 //!
 //! Spawns `apps/server` as a managed subprocess, writes the assigned port to
-//! OPENAIDY_HOME/port, and handles graceful shutdown.
+//! AIDY_HOME/port, and handles graceful shutdown.
 
 use log::{error, info, warn};
 use serde::Serialize;
@@ -88,7 +88,7 @@ pub struct ServiceStatus {
     pub port: Option<u16>,
     pub restart_attempts: u32,
     pub pid: Option<u32>,
-    pub openaidy_home: PathBuf,
+    pub aidy_home: PathBuf,
 }
 
 /// Thread-safe service manager.
@@ -108,7 +108,7 @@ pub struct ServiceManager {
     child: Arc<Mutex<Option<Child>>>,
     port: Arc<RwLock<Option<u16>>>,
     restart_attempts: Arc<RwLock<u32>>,
-    openaidy_home: PathBuf,
+    aidy_home: PathBuf,
 }
 
 /// Distinguishes a port-contention failure (worth retrying with a fresh
@@ -119,13 +119,13 @@ enum StartOnceError {
 }
 
 impl ServiceManager {
-    pub fn new(openaidy_home: PathBuf) -> Self {
+    pub fn new(aidy_home: PathBuf) -> Self {
         Self {
             state: Arc::new(RwLock::const_new(ServiceState::Idle)),
             child: Arc::new(Mutex::const_new(None)),
             port: Arc::new(RwLock::const_new(None)),
             restart_attempts: Arc::new(RwLock::const_new(0)),
-            openaidy_home,
+            aidy_home,
         }
     }
 
@@ -142,7 +142,7 @@ impl ServiceManager {
             port,
             restart_attempts,
             pid,
-            openaidy_home: self.openaidy_home.clone(),
+            aidy_home: self.aidy_home.clone(),
         }
     }
 
@@ -244,31 +244,31 @@ impl ServiceManager {
         use std::env;
 
         let port = pick_free_port().map_err(|e| StartOnceError::Other(e.to_string()))?;
-        let (program, args, cwd) = locate_server_entry(&self.openaidy_home, resource_dir);
+        let (program, args, cwd) = locate_server_entry(&self.aidy_home, resource_dir);
 
         // Build env. Names must match what apps/server/src/lib/env.ts's zod
         // schema actually reads from process.env — it has no PORT/CORS_ORIGIN/
         // WS_PORT keys (those are internal aliases *derived* from the real
         // ones on the parsed config object, never consumed as env-var input),
-        // so setting those instead of OPENAIDY_PORT/OPENAIDY_CORS_ORIGIN was a
+        // so setting those instead of AIDY_PORT/AIDY_CORS_ORIGIN was a
         // silent no-op: the server always bound 3001 with the default
         // http://localhost:5173 CORS origin regardless of what we picked here.
         let mut vars: Vec<(String, String)> = env::vars().collect();
         let additions = [
-            ("OPENAIDY_PORT".to_string(), port.to_string()),
+            ("AIDY_PORT".to_string(), port.to_string()),
             (
-                "OPENAIDY_HOME".to_string(),
-                self.openaidy_home.to_string_lossy().to_string(),
+                "AIDY_HOME".to_string(),
+                self.aidy_home.to_string_lossy().to_string(),
             ),
             (
-                "OPENAIDY_CORS_ORIGIN".to_string(),
+                "AIDY_CORS_ORIGIN".to_string(),
                 tauri_webview_origin().to_string(),
             ),
             ("DB_KIND".to_string(), "sqlite".to_string()),
             (
                 "SQLITE_PATH".to_string(),
-                self.openaidy_home
-                    .join("openaidy.db")
+                self.aidy_home
+                    .join("aidy.db")
                     .to_string_lossy()
                     .to_string(),
             ),
@@ -293,11 +293,11 @@ impl ServiceManager {
         // config/ into the bundle as "shared-config" specifically so these
         // can be pointed at a real location instead.
         let shared_config_dir = cwd.join("shared-config");
-        if shared_config_dir.join("openaidy.template.json").exists() {
+        if shared_config_dir.join("aidy.template.json").exists() {
             vars.push((
                 "APP_CONFIG_TEMPLATE_PATH".to_string(),
                 shared_config_dir
-                    .join("openaidy.template.json")
+                    .join("aidy.template.json")
                     .to_string_lossy()
                     .to_string(),
             ));
@@ -332,7 +332,7 @@ impl ServiceManager {
                 // actually do about it.
                 if e.kind() == std::io::ErrorKind::NotFound {
                     StartOnceError::Other(
-                        "Node.js was not found on PATH. OpenAidy's core service requires \
+                        "Node.js was not found on PATH. Aidy's core service requires \
                          Node.js 18+ to be installed separately — see https://nodejs.org/"
                             .to_string(),
                     )
@@ -378,7 +378,7 @@ impl ServiceManager {
                 .is_ok()
             {
                 // Write port file
-                write_port_file(&self.openaidy_home, port_copy)
+                write_port_file(&self.aidy_home, port_copy)
                     .map_err(|e| StartOnceError::Other(format!("write_port_file: {e}")))?;
                 info!("Server confirmed on port {port_copy}");
 
@@ -508,7 +508,7 @@ impl ServiceManager {
         }
 
         // Remove port file
-        let port_file = self.openaidy_home.join("port");
+        let port_file = self.aidy_home.join("port");
         let _ = std::fs::remove_file(&port_file);
 
         let mut s = self.state.write().await;
@@ -519,11 +519,11 @@ impl ServiceManager {
 
 /// Locate the server entry point and how to run it.
 ///
-/// `openaidy_home` (the OS per-user app-data dir, e.g. `%APPDATA%/openaidy`
+/// `aidy_home` (the OS per-user app-data dir, e.g. `%APPDATA%/aidy`
 /// on Windows) has no path relationship to where the monorepo source or a
 /// packaged build's resources live — it used to be (wrongly) used as the
 /// basis for this lookup, which meant this always failed to find the server
-/// outside of the one specific case where openaidy_home happened to be
+/// outside of the one specific case where aidy_home happened to be
 /// nested exactly two directories inside the workspace root.
 ///
 /// Both dev and packaged mode run the *TypeScript source* directly through
@@ -548,13 +548,13 @@ impl ServiceManager {
 /// .resource_dir()` — the bundled-resources directory, which is *not*
 /// simply "next to the executable" on every platform, e.g. it's inside
 /// `Contents/Resources` in a macOS `.app` bundle) for `server-bundle`, the
-/// self-contained `pnpm --filter @openaidy/server deploy --prod` output
+/// self-contained `pnpm --filter @aidyagent/server deploy --prod` output
 /// `tauri.conf.json`'s `beforeBuildCommand` produces and `bundle.resources`
 /// ships — apps/server's own source plus its fully resolved production
 /// node_modules (`pnpm deploy` flattens the target package's own contents
 /// to the deploy dir, so `server-bundle/` here plays the same role
 /// `apps/server/` does for the dev fallback below). `tsx` is a direct
-/// dependency of `@openaidy/server` specifically so this deploy step
+/// dependency of `@aidyagent/server` specifically so this deploy step
 /// captures it.
 ///
 /// Dev mode: `apps/server/src/server.ts` plus the workspace root's own
@@ -563,7 +563,7 @@ impl ServiceManager {
 /// `apps/desktop/src-tauri` — so this only works when built from the
 /// monorepo, which is exactly the dev case).
 fn locate_server_entry(
-    _openaidy_home: &Path,
+    _aidy_home: &Path,
     resource_dir: Option<&Path>,
 ) -> (String, Vec<String>, PathBuf) {
     let dev_workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -641,9 +641,9 @@ fn pick_free_port() -> std::io::Result<u16> {
 }
 
 /// Write the port file so the frontend IPC bridge can find it.
-fn write_port_file(openaidy_home: &Path, port: u16) -> std::io::Result<()> {
-    std::fs::create_dir_all(openaidy_home)?;
-    let port_file = openaidy_home.join("port");
+fn write_port_file(aidy_home: &Path, port: u16) -> std::io::Result<()> {
+    std::fs::create_dir_all(aidy_home)?;
+    let port_file = aidy_home.join("port");
     std::fs::write(&port_file, port.to_string())?;
     info!("Wrote port file: {port_file:?} = {port}");
     Ok(())
@@ -651,8 +651,8 @@ fn write_port_file(openaidy_home: &Path, port: u16) -> std::io::Result<()> {
 
 /// Read the port file to reconnect to an already-running server.
 #[allow(dead_code)]
-fn read_port_file(openaidy_home: &Path) -> Option<u16> {
-    let port_file = openaidy_home.join("port");
+fn read_port_file(aidy_home: &Path) -> Option<u16> {
+    let port_file = aidy_home.join("port");
     let content = std::fs::read_to_string(port_file).ok()?;
     content.trim().parse().ok()
 }
@@ -726,7 +726,7 @@ mod tests {
             port: None,
             restart_attempts: 0,
             pid: None,
-            openaidy_home: PathBuf::from("/tmp"),
+            aidy_home: PathBuf::from("/tmp"),
         };
         let _ = format!("{status:?}");
     }
@@ -748,7 +748,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("should create temp dir");
         let manager = ServiceManager::new(temp_dir.path().to_path_buf());
         let status = futures::executor::block_on(manager.status());
-        assert_eq!(status.openaidy_home, temp_dir.path());
+        assert_eq!(status.aidy_home, temp_dir.path());
     }
 
     #[test]
@@ -819,7 +819,7 @@ mod tests {
     #[test]
     fn test_write_port_file_creates_directory() {
         let temp_dir = TempDir::new().expect("should create temp dir");
-        let nested_dir = temp_dir.path().join("openaidy").join("subdir");
+        let nested_dir = temp_dir.path().join("aidy").join("subdir");
         let port: u16 = 12345;
 
         write_port_file(&nested_dir, port).expect("write should succeed");
@@ -869,7 +869,7 @@ mod tests {
         fs::write(dev_dir.join("server.ts"), "console.log('dev')").expect("should write dev entry");
 
         // A complete bundled deploy needs both the entry *and* its own tsx —
-        // this is what `pnpm deploy --prod` for @openaidy/server (which now
+        // this is what `pnpm deploy --prod` for @aidyagent/server (which now
         // depends on tsx directly) actually produces.
         let bundled_root = root.join("resource-dir").join("server-bundle");
         fs::create_dir_all(bundled_root.join("src")).expect("should create bundled src dir");

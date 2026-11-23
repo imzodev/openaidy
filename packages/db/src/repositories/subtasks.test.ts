@@ -15,7 +15,7 @@ import { TasksRepository } from './tasks';
 import { SubtasksRepository } from './subtasks';
 
 describe('SubtasksRepository — workflow graph (sqlite)', () => {
-  const dbPath = join(tmpdir(), `openaidy-subtasks-test-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `aidy-subtasks-test-${Date.now()}.db`);
   let conn: DatabaseConnection;
   let tasksRepo: TasksRepository;
   let subtasksRepo: SubtasksRepository;

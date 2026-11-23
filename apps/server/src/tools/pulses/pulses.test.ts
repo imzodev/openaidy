@@ -5,7 +5,7 @@ import type {
   SessionsStore,
   JobRunsStore,
   ScheduledJob,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { PulseService } from '../../pulses/service.js';
 
 function makeMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {

@@ -43,7 +43,7 @@ import {
   type AssistantMessage,
   type Message,
   type ToolResultMessage,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 
 export type ProviderHistoryRepair = {
   messages: Message[];

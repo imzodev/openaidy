@@ -15,7 +15,7 @@ import {
   WS_ERROR_CODES,
   WS_CAPABILITIES,
   type WSResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { defaultWebSocketConfig } from './types';
 import { AuthMiddleware } from './middleware/auth';
 import type { AppServices } from '../types';

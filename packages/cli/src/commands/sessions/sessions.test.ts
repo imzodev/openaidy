@@ -66,16 +66,16 @@ function mockFetchJson(data: unknown, status = 200) {
 // 5. Set up fake env for server URL
 // ---------------------------------------------------------------------------
 
-const originalServerUrl = process.env.OPENAIDY_SERVER_URL;
+const originalServerUrl = process.env.AIDY_SERVER_URL;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
-  process.env.OPENAIDY_SERVER_URL = 'http://localhost:3001';
+  process.env.AIDY_SERVER_URL = 'http://localhost:3001';
 });
 
 afterEach(() => {
-  process.env.OPENAIDY_SERVER_URL = originalServerUrl ?? '';
+  process.env.AIDY_SERVER_URL = originalServerUrl ?? '';
 });
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ describe('sessions list', () => {
   it('shows help with --help', async () => {
     const result = await sessionsListHandler(['--help']);
     expect(result.exitCode).toBe(0);
-    expect(noteOutput()).toContain('openaidy sessions list');
+    expect(noteOutput()).toContain('aidy sessions list');
   });
 
   it('lists sessions successfully', async () => {
@@ -176,7 +176,7 @@ describe('sessions get', () => {
   it('shows help with --help', async () => {
     const result = await sessionsGetHandler(['--help']);
     expect(result.exitCode).toBe(0);
-    expect(noteOutput()).toContain('openaidy sessions get');
+    expect(noteOutput()).toContain('aidy sessions get');
   });
 
   it('returns exit code 2 when session ID missing', async () => {
@@ -217,7 +217,7 @@ describe('sessions create', () => {
   it('shows help with --help', async () => {
     const result = await sessionsCreateHandler(['--help']);
     expect(result.exitCode).toBe(0);
-    expect(noteOutput()).toContain('openaidy sessions create');
+    expect(noteOutput()).toContain('aidy sessions create');
   });
 
   it('creates session with provided title', async () => {
@@ -262,7 +262,7 @@ describe('sessions messages', () => {
   it('shows help with --help', async () => {
     const result = await sessionsMessagesHandler(['--help']);
     expect(result.exitCode).toBe(0);
-    expect(noteOutput()).toContain('openaidy sessions messages');
+    expect(noteOutput()).toContain('aidy sessions messages');
   });
 
   it('returns exit code 2 when session ID missing', async () => {
@@ -326,7 +326,7 @@ describe('sessions runs', () => {
   it('shows help with --help', async () => {
     const result = await sessionsRunsHandler(['--help']);
     expect(result.exitCode).toBe(0);
-    expect(noteOutput()).toContain('openaidy sessions runs');
+    expect(noteOutput()).toContain('aidy sessions runs');
   });
 
   it('returns exit code 2 when session ID missing', async () => {
