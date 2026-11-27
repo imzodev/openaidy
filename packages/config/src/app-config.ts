@@ -326,6 +326,11 @@ export const appAgentConfigSchema = z.object({
   // fresh install can ship an agent with no model; it inherits the config
   // default (which onboarding sets once the first provider is connected).
   model: z.string().min(1).optional(),
+  /**
+   * Default thinking effort for this agent's runs (mirrors ReasoningEffort
+   * in @aidyagent/shared-types). Absent = the model's own default.
+   */
+  reasoningEffort: z.enum(['off', 'low', 'medium', 'high', 'max']).optional(),
   tools: z.array(z.string()).optional(),
   mcpServers: z.array(appAgentMcpServerRefSchema).optional(),
   tags: z.array(z.string()).optional(),

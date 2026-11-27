@@ -135,6 +135,8 @@ export type Agent = {
   enabled: boolean;
   systemPrompt: string;
   model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  /** Default thinking effort; absent = the model's default. */
+  reasoningEffort?: import('@aidyagent/shared-types').ReasoningEffort;
   tags?: string[];
   tools?: string[];
   skills?: string[];
@@ -237,6 +239,8 @@ export type SubmitMessageInput = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
+  /** Thinking effort for this message; absent = the agent's default. */
+  reasoningEffort?: import('@aidyagent/shared-types').ReasoningEffort;
   /** Ids of previously-uploaded attachments to link to this message */
   attachmentIds?: string[];
 };

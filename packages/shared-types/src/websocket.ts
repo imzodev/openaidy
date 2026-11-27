@@ -226,6 +226,8 @@ export type SessionMessageRequest = WSMessage<
     agentId?: string;
     providerId?: string;
     modelId?: string;
+    /** Thinking effort for this message; absent = the agent's default. */
+    reasoningEffort?: import('./reasoning.js').ReasoningEffort;
     /** Ids of previously-uploaded attachments to link to this message */
     attachmentIds?: string[];
     metadata?: Record<string, unknown>;

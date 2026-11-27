@@ -48,7 +48,13 @@ export class DeepSeekProfile extends ProviderProfile {
 
   // ── Overrides ──────────────────────────────────────────────────────────────
 
-  /** Inject thinking block config into the request */
+  /**
+   * Inject thinking block config into the request.
+   *
+   * Not called by the server: thinking effort is applied by model in
+   * `apps/server/src/providers/infrastructure/openai-compatible/reasoning.ts`
+   * (gateways serve DeepSeek too). Change it there, not here.
+   */
   override buildExtraBody(context: HookContext) {
     const { reasoningConfig } = context;
     if (!reasoningConfig?.enabled) {

@@ -16,6 +16,11 @@ export type SubmitMessageInput = {
    * message. The bytes were stored via POST /sessions/:id/attachments.
    */
   attachmentIds?: string[];
+  /**
+   * Thinking effort for this run; absent = the agent's default. Clamped to
+   * what the model supports, and dropped for models with no known control.
+   */
+  reasoningEffort?: import('@aidyagent/shared-types').ReasoningEffort;
 };
 
 /**

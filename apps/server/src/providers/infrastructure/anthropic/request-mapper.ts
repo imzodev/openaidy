@@ -12,6 +12,7 @@ import type {
   AnthropicToolDefinition,
   AnthropicMessagesRequest,
 } from './types';
+import { resolveReasoningSupport } from '@aidyagent/shared-types';
 
 const EPHEMERAL = { type: 'ephemeral' } as const;
 
@@ -265,6 +266,17 @@ export function mapRequest(
 
   if (request.topP !== undefined) {
     anthropicRequest.top_p = request.topP;
+  }
+
+  // Effort only: adaptive thinking needs its signed thinking blocks replayed
+  // in tool loops, which this adapter doesn't keep yet.
+  const effort = request.reasoningEffort;
+  if (
+    effort &&
+    effort !== 'off' &&
+    resolveReasoningSupport(request.model)?.style === 'anthropic-effort'
+  ) {
+    anthropicRequest.output_config = { effort };
   }
 
   if (request.stopSequences !== undefined && request.stopSequences.length > 0) {
