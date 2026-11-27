@@ -2,13 +2,26 @@
  * MemoriesPage
  *
  * Agent master-detail view of persisted agent memories. The left rail lists
- * agents (with memory counts) plus an "All agents" entry; the main pane shows
- * that agent's memories as cards, ordered by importance. Supports full-text
- * search and full management (create / edit / delete) via MemoryModal.
+ * "About you" (what Aidy knows about the owner, shared by every agent and
+ * mostly learned from conversations), then agents with memory counts, plus an
+ * "All agents" entry; the main pane shows the selection's memories as cards,
+ * ordered by importance. Supports full-text search and full management
+ * (create / edit / delete) via MemoryModal.
  */
 
 import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
-import { Brain, Plus, Search, X, Pencil, Trash2, Star } from 'lucide-solid';
+import {
+  Brain,
+  Plus,
+  Search,
+  X,
+  Pencil,
+  Trash2,
+  Star,
+  Sparkles,
+  UserRound,
+} from 'lucide-solid';
+import { OWNER_MEMORY_AGENT_ID } from '@aidyagent/shared-types';
 import { Layout } from './Layout';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { MemoryModal } from './MemoryModal';
@@ -163,7 +176,7 @@ export function MemoriesPage() {
   return (
     <Layout
       title="Memories"
-      description="Browse and manage what your agents remember"
+      description="What Aidy knows about you and what your agents remember"
       actions={
         <button
           type="button"
@@ -222,7 +235,12 @@ export function MemoriesPage() {
                   }`}
                   title={agent.name}
                 >
-                  <span class="truncate">{agent.name}</span>
+                  <span class="flex items-center gap-2 min-w-0">
+                    <Show when={agent.id === OWNER_MEMORY_AGENT_ID}>
+                      <UserRound class="w-4 h-4 flex-shrink-0" />
+                    </Show>
+                    <span class="truncate">{agent.name}</span>
+                  </span>
                   <span class="text-xs text-text-tertiary ml-2">
                     {agent.count}
                   </span>
@@ -269,7 +287,9 @@ export function MemoriesPage() {
                   <p class="text-text-tertiary text-sm">
                     {isSearching()
                       ? 'No memories match your search'
-                      : 'No memories yet'}
+                      : selectedAgentId() === OWNER_MEMORY_AGENT_ID
+                        ? 'Nothing yet. Aidy learns your preferences, the people you mention and your routines from your conversations, and shares them with every agent.'
+                        : 'No memories yet'}
                   </p>
                   <Show when={!isSearching() && agents().length > 0}>
                     <button
@@ -306,6 +326,25 @@ export function MemoriesPage() {
                               <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                                 {agentName(memory.agentId)}
                               </span>
+                            </Show>
+                            <Show when={memory.source === 'learned'}>
+                              <span
+                                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary"
+                                title="Learned from a conversation"
+                              >
+                                <Sparkles class="w-3 h-3" />
+                                Learned
+                              </span>
+                            </Show>
+                            <Show when={memory.sourceSessionId}>
+                              {(sessionId) => (
+                                <a
+                                  href={`/chat?sessionId=${sessionId()}`}
+                                  class="text-primary hover:underline"
+                                >
+                                  conversation
+                                </a>
+                              )}
                             </Show>
                             <For each={memory.tags}>
                               {(tag) => (

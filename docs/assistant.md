@@ -37,6 +37,10 @@ If the conversation is on WhatsApp (or Discord), the reply goes to that chat —
 
 The tools behind this are available to every agent: `reminder_create`, `reminder_list`, `reminder_cancel` and `notify_owner` (send you a message). `pulses_create` takes `sendToOwner` and `onlyIfNeeded`.
 
+## What Aidy learns about you
+
+Aidy also learns from your conversations: preferences, the people you mention, your routines. Every agent uses it, and customer chats are never read. **Settings → Assistant → What Aidy learns about you** turns it off or forgets what was learned; **Memories → About you** shows everything. See [Memories](./memories.md#about-you-learned-memory).
+
 ## How it works
 
 Briefings, alerts and reminders are all scheduled prompts run by the scheduler, like pulses (`scheduled_jobs` with `metadata.kind` `pulse`, `reminder` or `briefing`). Before a run, the prompt gets the extra instructions (reminder framing, briefing facts, "answer exactly `NO_UPDATE` if there's nothing to say", the last message sent). After it, the answer is sent to you and/or back to the conversation's chat, and stored with the run so the Pulses history shows what was said and where it went. Which chat a conversation belongs to is recorded when its messages arrive (`session_channels`).

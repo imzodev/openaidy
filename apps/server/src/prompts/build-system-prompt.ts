@@ -5,7 +5,7 @@ import type { ProviderServices } from '../providers';
 import { autoFillPersonalityFiles } from './auto-fill-personality';
 import type { ToolDefinition } from '@aidyagent/runtime';
 import type { WorkspacePermissionsInfo } from '../types';
-import type { SessionType } from '@aidyagent/shared-types';
+import type { Memory, SessionType } from '@aidyagent/shared-types';
 import { formatSessionSearchResultDocs } from '@aidyagent/db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -72,7 +72,45 @@ export type BuildSystemPromptOptions = {
   onboardingMessagesRemaining?: number | undefined;
   /** "Now" and who the agent is talking to ([NOW] / [CONVERSATION]). */
   context?: PromptContext | undefined;
+  /**
+   * What is known about the owner ([ABOUT_THE_OWNER]). Callers pass it only
+   * when the conversation is with the owner — never in a customer chat.
+   */
+  ownerMemories?: readonly Memory[] | undefined;
 };
+
+/**
+ * Whether [ABOUT_THE_OWNER] may go in this conversation's prompt: always,
+ * except in a chat with someone other than the owner, where the owner's
+ * private details must never reach the agent's context.
+ */
+export function ownerMemoriesAllowed(context: PromptContext): boolean {
+  return !context.conversation || context.conversation.isOwner;
+}
+
+/** Longest [ABOUT_THE_OWNER] body; the least important facts are dropped. */
+export const OWNER_MEMORY_BLOCK_MAX_CHARS = 3_000;
+
+/**
+ * What Aidy knows about the owner, most important first, so every agent
+ * starts a conversation already knowing who it works for. Expects the
+ * order `MemoriesRepository.listOwner` returns.
+ */
+export function buildOwnerMemoryBlock(memories: readonly Memory[]): string {
+  const lines: string[] = [];
+  let used = 0;
+  for (const m of memories) {
+    const line = `- ${m.title}: ${m.content.replace(/\s+/g, ' ').trim()}`;
+    if (used + line.length > OWNER_MEMORY_BLOCK_MAX_CHARS) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+  if (lines.length === 0) return '';
+  return `\n\n[ABOUT_THE_OWNER]
+What you know about the owner (the person you work for) from earlier conversations, shared by all agents. Let it shape your answers naturally; don't recite it. If the owner corrects one of these or says it's no longer true, save the correction with memory_save (scope "owner").
+${lines.join('\n')}
+[/ABOUT_THE_OWNER]`;
+}
 
 /** Where and when a conversation is happening. */
 export type PromptContext = {
@@ -294,7 +332,13 @@ export async function buildSystemPrompt(
     for (const { meta, content } of blocks) {
       prompt += `\n\n[${meta.systemPromptBlock}]\n${content}\n[/${meta.systemPromptBlock}]`;
     }
+  }
 
+  if (options.ownerMemories?.length) {
+    prompt += buildOwnerMemoryBlock(options.ownerMemories);
+  }
+
+  if (personalityService) {
     // If onboarding messages remain, inject targeted onboarding instructions for each blank file.
     // This runs on the first message AND the first user response (onboardingMessagesRemaining = 2 initially).
     if (onboardingMessagesRemaining > 0) {
@@ -478,7 +522,7 @@ Your personality configuration is stored in workspace files:
 - MISSION.md: The user's mission for this conversation
 - RULES.md: Hard constraints or rules to always follow
 
-When the user tells you something that should be saved to any of these files, ALWAYS use the workspace_write tool with the appropriate path and content format. Do NOT use memory_save for personality information.
+When the user asks you to change any of these files, use the workspace_write tool with the appropriate path and content format. Preferences and facts about the owner that come up in conversation are learned automatically and shared by all agents (see [ABOUT_THE_OWNER]); you don't need to write them into USER.md.
 [/PERSONALITY_FILES_REMINDER]`;
   }
 
@@ -586,7 +630,7 @@ You can call only the ${tools.length} tool(s) provided with this request${deferr
 ### Memory Tools
 `;
     if (hasMemorySave) {
-      guidelines += `- memory_save: save durable facts the user would expect you to remember next time (a stated preference, a decision, a lasting fact about their work). Don't save routine details of the current task, and save each fact once.
+      guidelines += `- memory_save: save durable facts you'd want next time (a decision, a lasting fact about the work). Don't save routine details of the current task, and save each fact once. Facts about the owner are learned automatically after the conversation; use scope "owner" only when the owner explicitly asks you to remember or correct something about them.
 `;
     }
     if (hasMemorySearch) {

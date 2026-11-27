@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createDatabaseClient, type DatabaseConnection } from '../client';
+import { OWNER_MEMORY_AGENT_ID } from '@aidyagent/shared-types';
 import { MemoriesRepository, createMemoriesRepository } from './memories';
 
 type Database = DatabaseConnection['db'];
@@ -273,6 +274,119 @@ describe('MemoriesRepository', () => {
       });
       const deleted = await repo.delete(memory.id, undefined);
       expect(deleted).toBe(true);
+    });
+  });
+
+  describe('owner memories', () => {
+    it('stores source, kind and the session a fact came from', async () => {
+      const memory = await repo.create({
+        agentId: OWNER_MEMORY_AGENT_ID,
+        title: 'Short answers',
+        content: 'Prefers short answers',
+        source: 'learned',
+        kind: 'preference',
+        sourceSessionId: 'session-1',
+      });
+      const [read] = await repo.listOwner();
+      expect(read).toMatchObject({
+        id: memory.id,
+        source: 'learned',
+        kind: 'preference',
+        sourceSessionId: 'session-1',
+      });
+    });
+
+    it('defaults source to agent with no kind or session', async () => {
+      const memory = await repo.create({
+        agentId: 'agent-a',
+        title: 'Note',
+        content: 'Content',
+      });
+      expect(memory).toMatchObject({
+        source: 'agent',
+        kind: null,
+        sourceSessionId: null,
+      });
+    });
+
+    it('agent search includes owner facts unless told not to', async () => {
+      await repo.create({
+        agentId: OWNER_MEMORY_AGENT_ID,
+        title: 'Partner',
+        content: 'Ana is the business partner',
+      });
+      await repo.create({
+        agentId: 'agent-a',
+        title: 'Ana invoice',
+        content: 'Ana asked for the invoice',
+      });
+      await repo.create({
+        agentId: 'agent-b',
+        title: 'Ana call',
+        content: 'Call Ana tomorrow',
+      });
+
+      const withOwner = await repo.search('Ana', 'agent-a');
+      expect(withOwner.map((m) => m.agentId).sort()).toEqual(
+        [OWNER_MEMORY_AGENT_ID, 'agent-a'].sort(),
+      );
+
+      const withoutOwner = await repo.search('Ana', 'agent-a', 10, false);
+      expect(withoutOwner.map((m) => m.agentId)).toEqual(['agent-a']);
+
+      const everyAgentNoOwner = await repo.search('Ana', undefined, 10, false);
+      expect(everyAgentNoOwner.map((m) => m.agentId).sort()).toEqual([
+        'agent-a',
+        'agent-b',
+      ]);
+
+      const ownerOnly = await repo.search('Ana', OWNER_MEMORY_AGENT_ID);
+      expect(ownerOnly.map((m) => m.agentId)).toEqual([OWNER_MEMORY_AGENT_ID]);
+    });
+
+    it('listOwner orders by importance, then most recently updated', async () => {
+      const low = await repo.create({
+        agentId: OWNER_MEMORY_AGENT_ID,
+        title: 'Low',
+        content: 'x',
+        importance: 2,
+      });
+      const high = await repo.create({
+        agentId: OWNER_MEMORY_AGENT_ID,
+        title: 'High',
+        content: 'x',
+        importance: 5,
+      });
+      await repo.create({ agentId: 'agent-a', title: 'Other', content: 'x' });
+      const ids = (await repo.listOwner()).map((m) => m.id);
+      expect(ids).toEqual([high.id, low.id]);
+    });
+
+    it('deleteBySource removes only learned owner facts', async () => {
+      await repo.create({
+        agentId: OWNER_MEMORY_AGENT_ID,
+        title: 'Learned',
+        content: 'x',
+        source: 'learned',
+      });
+      const kept = await repo.create({
+        agentId: OWNER_MEMORY_AGENT_ID,
+        title: 'Written by the owner',
+        content: 'x',
+        source: 'user',
+      });
+      await repo.create({
+        agentId: 'agent-a',
+        title: 'Agent learned',
+        content: 'x',
+        source: 'learned',
+      });
+
+      expect(await repo.deleteBySource(OWNER_MEMORY_AGENT_ID, 'learned')).toBe(
+        1,
+      );
+      expect((await repo.listOwner()).map((m) => m.id)).toEqual([kept.id]);
+      expect(await repo.list('agent-a')).toHaveLength(1);
     });
   });
 });

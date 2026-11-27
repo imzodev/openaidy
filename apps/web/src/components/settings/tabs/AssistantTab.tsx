@@ -1,16 +1,19 @@
 /**
  * Assistant settings: who Aidy works for, where to reach them
  * (WhatsApp etc.), their timezone and quiet hours, whether workflows tell
- * them about approvals and failures, and the daily briefing.
+ * them about approvals and failures, the daily briefing, and whether Aidy
+ * learns about them from their conversations.
  */
 
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import {
+  forgetLearnedMemories,
   listChannels,
   listScheduled,
   triggerPulse,
   type AppConfig,
 } from '../../../lib/api';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { getStoredToken } from '../../../lib/auth-token';
 import type { OwnerConfig } from '../../../lib/types';
 
@@ -58,6 +61,9 @@ export function AssistantTab(props: AssistantTabProps) {
   const [channels] = createResource(() => listChannels().catch(() => []));
   const [sending, setSending] = createSignal(false);
   const [sendResult, setSendResult] = createSignal<string | null>(null);
+  const [confirmForget, setConfirmForget] = createSignal(false);
+  const [forgetting, setForgetting] = createSignal(false);
+  const [forgetResult, setForgetResult] = createSignal<string | null>(null);
 
   const update = (patch: Partial<OwnerConfig>) =>
     props.onChange({ owner: { ...owner(), ...patch } });
@@ -65,6 +71,22 @@ export function AssistantTab(props: AssistantTabProps) {
   const updateBriefing = (
     patch: Partial<NonNullable<OwnerConfig['briefing']>>,
   ) => update({ briefing: { ...briefing(), ...patch } });
+
+  async function forgetLearned() {
+    setForgetting(true);
+    setForgetResult(null);
+    try {
+      const deleted = await forgetLearnedMemories();
+      setForgetResult(
+        deleted === 1 ? 'Forgot 1 thing.' : `Forgot ${deleted} things.`,
+      );
+      setConfirmForget(false);
+    } catch (err) {
+      setForgetResult(err instanceof Error ? err.message : "Couldn't forget");
+    } finally {
+      setForgetting(false);
+    }
+  }
 
   async function sendBriefingNow() {
     setSendResult(null);
@@ -325,6 +347,51 @@ export function AssistantTab(props: AssistantTabProps) {
           </p>
         </Show>
       </Section>
+
+      <Section
+        title="What Aidy learns about you"
+        description="After a conversation with you goes quiet, Aidy notes lasting preferences, the people you mention and your routines, and every agent uses them. Conversations with customers are never read."
+      >
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={owner().memory?.learn !== false}
+            onChange={(e) =>
+              update({ memory: { learn: e.currentTarget.checked } })
+            }
+          />
+          Learn about me from our conversations
+        </label>
+        <div class="flex items-center gap-3 flex-wrap">
+          <a href="/memories" class="text-sm text-primary hover:underline">
+            See what Aidy knows
+          </a>
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+            disabled={forgetting()}
+            onClick={() => setConfirmForget(true)}
+          >
+            Forget everything learned
+          </button>
+          <Show when={forgetResult()}>
+            <span class="text-xs text-gray-500 dark:text-gray-400">
+              {forgetResult()}
+            </span>
+          </Show>
+        </div>
+      </Section>
+
+      <ConfirmDialog
+        isOpen={confirmForget()}
+        title="Forget everything learned"
+        body="Delete everything Aidy learned about you from conversations? Things you or an agent saved on purpose are kept. This cannot be undone."
+        confirmLabel="Forget"
+        tone="danger"
+        isPending={forgetting()}
+        onConfirm={() => void forgetLearned()}
+        onCancel={() => setConfirmForget(false)}
+      />
     </div>
   );
 }
