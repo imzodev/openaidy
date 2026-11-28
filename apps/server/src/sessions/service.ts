@@ -452,6 +452,7 @@ export class SessionMessageService {
       const result = await this.providers.invocation.invoke(
         {
           model: params.modelId,
+          sessionId: params.sessionId,
           messages: [
             { role: 'system', content: COMPACTION_INSTRUCTIONS },
             {
@@ -1146,6 +1147,7 @@ export class SessionMessageService {
     const modelRequest: ModelRequest = {
       model: modelId,
       messages,
+      sessionId: input.sessionId,
     };
 
     // Build invocation options: client overrides take priority, then agent-resolved values
@@ -1951,6 +1953,7 @@ export class SessionMessageService {
         const modelRequest: ModelRequest = {
           model: modelId,
           messages: loopMessages,
+          sessionId: input.sessionId,
           ...(offerTools && { tools: allTools, toolChoice: 'auto' }),
           // Run-level cancel: aborting this signal cancels the provider fetch.
           signal: runController.signal,
