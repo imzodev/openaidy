@@ -503,6 +503,7 @@ export class SessionMessageService {
       const result = await this.providers.invocation.invoke(
         {
           model: params.modelId,
+          sessionId: params.sessionId,
           messages: [
             { role: 'system', content: COMPACTION_INSTRUCTIONS },
             {
@@ -1203,6 +1204,7 @@ export class SessionMessageService {
     const modelRequest: ModelRequest = {
       model: modelId,
       messages,
+      sessionId: input.sessionId,
       ...(reasoningEffort && { reasoningEffort }),
     };
 
@@ -2020,6 +2022,7 @@ export class SessionMessageService {
         const modelRequest: ModelRequest = {
           model: modelId,
           messages: loopMessages,
+          sessionId: input.sessionId,
           ...(offerTools && { tools: allTools, toolChoice: 'auto' }),
           ...(reasoningEffort && { reasoningEffort }),
           // Run-level cancel: aborting this signal cancels the provider fetch.

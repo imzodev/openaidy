@@ -76,6 +76,12 @@ export type ModelRequest = {
   readonly stream?: boolean;
   readonly metadata?: Record<string, unknown>;
   /**
+   * The conversation this request belongs to. Not sent as message content;
+   * gateways that route or cache by conversation (OpenCode Go's
+   * `x-opencode-session`) get it as a stable id. Absent for one-off calls.
+   */
+  readonly sessionId?: string;
+  /**
    * How hard the model should think (mirrors `ReasoningEffort` in
    * `@aidyagent/shared-types`). Callers set it only for models that support
    * it; each adapter translates it to its own parameter. Undefined = the
