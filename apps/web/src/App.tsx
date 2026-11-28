@@ -80,6 +80,15 @@ import {
   recordRecentAgent,
 } from './stores/recent-items';
 import { initUpdateNotice, recordUpdateCheck } from './stores/update-notice';
+import {
+  clampReasoningEffort,
+  resolveReasoningSupport,
+  type ReasoningEffort,
+} from '@aidyagent/shared-types';
+import {
+  getSessionReasoningEffort,
+  setSessionReasoningEffort,
+} from './lib/reasoning-preference';
 import './index.css';
 
 // Create a client
@@ -928,6 +937,9 @@ function AppContent(props: AppContentProps) {
         agentId,
         providerId,
         modelId,
+        ...(thinkingPicker()?.value
+          ? { reasoningEffort: thinkingPicker()?.value }
+          : {}),
         ...(attachmentIds?.length ? { attachmentIds } : {}),
       });
 
@@ -946,6 +958,38 @@ function AppContent(props: AppContentProps) {
   };
 
   // Effective agentId - user selection takes precedence, then session, then fallback
+  // Thinking effort chosen per conversation (undefined = agent default).
+  // The in-memory map keeps a choice even when localStorage can't.
+  const [reasoningChoices, setReasoningChoices] = createSignal<
+    Record<string, ReasoningEffort | 'auto'>
+  >({});
+  const sessionReasoningEffort = (): ReasoningEffort | undefined => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) return undefined;
+    const chosen = reasoningChoices()[sessionId];
+    if (chosen) return chosen === 'auto' ? undefined : chosen;
+    return getSessionReasoningEffort(sessionId);
+  };
+  const handleReasoningChange = (effort: ReasoningEffort | undefined) => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) return;
+    setReasoningChoices((prev) => ({ ...prev, [sessionId]: effort ?? 'auto' }));
+    setSessionReasoningEffort(sessionId, effort);
+  };
+  // The picker for the current model, or undefined (hidden) when the model
+  // has no known thinking control.
+  const thinkingPicker = () => {
+    const support = resolveReasoningSupport(effectiveModel());
+    if (!support) return undefined;
+    const agent = agents().find((a) => a.id === effectiveAgentId());
+    return {
+      levels: support.levels,
+      value: clampReasoningEffort(support, sessionReasoningEffort()),
+      agentDefault: clampReasoningEffort(support, agent?.reasoningEffort),
+      onChange: handleReasoningChange,
+    };
+  };
+
   const effectiveAgentId = (): string | undefined => {
     // If user has explicitly selected an agent (via dropdown), use it
     const explicitSelection = selectedAgentId();
@@ -1504,6 +1548,7 @@ function AppContent(props: AppContentProps) {
                 onAgentSelect={handleAgentSelect}
                 onInputReady={(focus) => setFocusChatInput(() => focus)}
                 attachmentsDisabled={isActiveSessionPrivate()}
+                thinking={thinkingPicker()}
               />
               <Show when={submitError()}>
                 <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">

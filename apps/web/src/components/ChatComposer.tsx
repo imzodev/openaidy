@@ -1,6 +1,8 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { ArrowUp, ListPlus, Paperclip, X, Music } from 'lucide-solid';
 import { AgentPicker } from './AgentPicker';
+import { ThinkingPicker } from './ThinkingPicker';
+import type { ThinkingPickerProps } from '@aidyagent/shared-types';
 import type { Agent } from '../lib/api';
 
 type ChatComposerProps = {
@@ -28,6 +30,11 @@ type ChatComposerProps = {
    * attach button and ignores paste/drop of files.
    */
   attachmentsDisabled?: boolean;
+  /**
+   * Thinking-effort picker for the current model. Absent when the model has
+   * no known thinking control, which hides the picker.
+   */
+  thinking?: Omit<ThinkingPickerProps, 'variant' | 'disabled'> | undefined;
 };
 
 /** Mime prefixes accepted as chat attachments. */
@@ -280,6 +287,12 @@ export function ChatComposer(props: ChatComposerProps) {
               disabled={inputDisabled()}
             />
 
+            <Show when={props.thinking}>
+              {(thinking) => (
+                <ThinkingPicker {...thinking()} disabled={inputDisabled()} />
+              )}
+            </Show>
+
             {attachButton('w-9 h-9')}
 
             <div class="flex-1 min-w-0">
@@ -323,6 +336,15 @@ export function ChatComposer(props: ChatComposerProps) {
             onSelect={props.onAgentSelect}
             disabled={inputDisabled()}
           />
+          <Show when={props.thinking}>
+            {(thinking) => (
+              <ThinkingPicker
+                {...thinking()}
+                variant="icon"
+                disabled={inputDisabled()}
+              />
+            )}
+          </Show>
           {attachButton('w-8 h-8 rounded-full')}
           <textarea
             ref={setRef}

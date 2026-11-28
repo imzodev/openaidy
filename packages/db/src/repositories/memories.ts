@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseClient } from '../client';
-import type {
-  Memory,
-  CreateMemoryInput,
-  UpdateMemoryInput,
-  MemorySearchResult,
+import {
+  OWNER_MEMORY_AGENT_ID,
+  type Memory,
+  type MemoryKind,
+  type MemorySource,
+  type CreateMemoryInput,
+  type UpdateMemoryInput,
+  type MemorySearchResult,
+  type MemoryRow,
 } from '@aidyagent/shared-types';
 
 /**
@@ -15,6 +19,25 @@ function getRawSqlite(db: DatabaseClient) {
   return (db as any).session?.client ?? (db as any).driver;
 }
 
+const COLUMNS = `id, agent_id, title, content, tags, importance, source, kind,
+  source_session_id, created_at, updated_at`;
+
+function toMemory(row: MemoryRow): Memory {
+  return {
+    id: row.id,
+    agentId: row.agent_id,
+    title: row.title,
+    content: row.content,
+    tags: JSON.parse(row.tags) as string[],
+    importance: row.importance,
+    source: row.source as MemorySource,
+    kind: (row.kind as MemoryKind | null) ?? null,
+    sourceSessionId: row.source_session_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export class MemoriesRepository {
   constructor(private readonly db: DatabaseClient) {}
 
@@ -23,78 +46,80 @@ export class MemoriesRepository {
   ): Promise<Memory> {
     const id = randomUUID();
     const now = new Date().toISOString();
-    const tags = input.tags ?? [];
-    const importance = input.importance ?? 3;
-
-    const sqlite = getRawSqlite(this.db);
-    sqlite
-      .prepare(
-        `INSERT INTO memories (id, agent_id, title, content, tags, importance, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        id,
-        input.agentId,
-        input.title,
-        input.content,
-        JSON.stringify(tags),
-        importance,
-        now,
-        now,
-      );
-
-    return {
+    const memory: Memory = {
       id,
       agentId: input.agentId,
       title: input.title,
       content: input.content,
-      tags,
-      importance,
+      tags: input.tags ?? [],
+      importance: input.importance ?? 3,
+      source: input.source ?? 'agent',
+      kind: input.kind ?? null,
+      sourceSessionId: input.sourceSessionId ?? null,
       createdAt: now,
       updatedAt: now,
     };
+
+    getRawSqlite(this.db)
+      .prepare(
+        `INSERT INTO memories (${COLUMNS})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        memory.id,
+        memory.agentId,
+        memory.title,
+        memory.content,
+        JSON.stringify(memory.tags),
+        memory.importance,
+        memory.source,
+        memory.kind,
+        memory.sourceSessionId,
+        now,
+        now,
+      );
+
+    return memory;
   }
 
+  /**
+   * Full-text search. With `agentId`, results cover that agent's own
+   * memories; without it, every agent's. What is known about the owner is
+   * included unless `includeOwner` is false (a customer conversation).
+   */
   async search(
     query: string,
     agentId?: string,
     limit = 10,
+    includeOwner = true,
   ): Promise<MemorySearchResult[]> {
-    const sqlite = getRawSqlite(this.db);
-    const rows = sqlite
+    const owner = includeOwner ? 1 : 0;
+    const rows = getRawSqlite(this.db)
       .prepare(
         `SELECT m.id, m.agent_id, m.title, m.content, m.tags, m.importance,
+                m.source, m.kind, m.source_session_id,
                 m.created_at, m.updated_at, fts.rank
          FROM memories_fts fts
          JOIN memories m ON m.rowid = fts.rowid
          WHERE memories_fts MATCH ?
-           AND (? IS NULL OR m.agent_id = ?)
+           AND (
+             (m.agent_id = ? AND ? = 1)
+             OR (m.agent_id != ? AND (? IS NULL OR m.agent_id = ?))
+           )
          ORDER BY fts.rank
          LIMIT ?`,
       )
-      .all(query, agentId ?? null, agentId ?? null, limit) as {
-      id: string;
-      agent_id: string;
-      title: string;
-      content: string;
-      tags: string;
-      importance: number;
-      created_at: string;
-      updated_at: string;
-      rank: number;
-    }[];
+      .all(
+        query,
+        OWNER_MEMORY_AGENT_ID,
+        owner,
+        OWNER_MEMORY_AGENT_ID,
+        agentId ?? null,
+        agentId ?? null,
+        limit,
+      ) as (MemoryRow & { rank: number })[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      agentId: row.agent_id,
-      title: row.title,
-      content: row.content,
-      tags: JSON.parse(row.tags) as string[],
-      importance: row.importance,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      rank: row.rank,
-    }));
+    return rows.map((row) => ({ ...toMemory(row), rank: row.rank }));
   }
 
   async list(agentId?: string, limit = 50): Promise<Memory[]> {
@@ -102,50 +127,45 @@ export class MemoriesRepository {
     const rows = agentId
       ? (sqlite
           .prepare(
-            `SELECT id, agent_id, title, content, tags, importance, created_at, updated_at
-             FROM memories
+            `SELECT ${COLUMNS} FROM memories
              WHERE agent_id = ?
              ORDER BY importance DESC, created_at DESC
              LIMIT ?`,
           )
-          .all(agentId, limit) as {
-          id: string;
-          agent_id: string;
-          title: string;
-          content: string;
-          tags: string;
-          importance: number;
-          created_at: string;
-          updated_at: string;
-        }[])
+          .all(agentId, limit) as MemoryRow[])
       : (sqlite
           .prepare(
-            `SELECT id, agent_id, title, content, tags, importance, created_at, updated_at
-             FROM memories
+            `SELECT ${COLUMNS} FROM memories
              ORDER BY importance DESC, created_at DESC
              LIMIT ?`,
           )
-          .all(limit) as {
-          id: string;
-          agent_id: string;
-          title: string;
-          content: string;
-          tags: string;
-          importance: number;
-          created_at: string;
-          updated_at: string;
-        }[]);
+          .all(limit) as MemoryRow[]);
 
-    return rows.map((row) => ({
-      id: row.id,
-      agentId: row.agent_id,
-      title: row.title,
-      content: row.content,
-      tags: JSON.parse(row.tags) as string[],
-      importance: row.importance,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    return rows.map(toMemory);
+  }
+
+  /**
+   * What is known about the owner, most important and most recently
+   * confirmed first — the order the prompt block wants.
+   */
+  async listOwner(limit = 100): Promise<Memory[]> {
+    const rows = getRawSqlite(this.db)
+      .prepare(
+        `SELECT ${COLUMNS} FROM memories
+         WHERE agent_id = ?
+         ORDER BY importance DESC, updated_at DESC
+         LIMIT ?`,
+      )
+      .all(OWNER_MEMORY_AGENT_ID, limit) as MemoryRow[];
+    return rows.map(toMemory);
+  }
+
+  async findById(id: string): Promise<Memory | null> {
+    const rows = getRawSqlite(this.db)
+      .prepare(`SELECT ${COLUMNS} FROM memories WHERE id = ?`)
+      .all(id) as MemoryRow[];
+    const row = rows[0];
+    return row ? toMemory(row) : null;
   }
 
   /**
@@ -179,6 +199,10 @@ export class MemoriesRepository {
       sets.push('importance = ?');
       values.push(patch.importance);
     }
+    if (patch.kind !== undefined) {
+      sets.push('kind = ?');
+      values.push(patch.kind);
+    }
     // updated_at always bumps, so `sets` is never empty.
     const now = new Date().toISOString();
     sets.push('updated_at = ?');
@@ -195,35 +219,7 @@ export class MemoriesRepository {
       .run(...values);
 
     if (result.changes === 0) return null;
-
-    const rows = sqlite
-      .prepare(
-        `SELECT id, agent_id, title, content, tags, importance, created_at, updated_at
-         FROM memories WHERE id = ?`,
-      )
-      .all(id) as {
-      id: string;
-      agent_id: string;
-      title: string;
-      content: string;
-      tags: string;
-      importance: number;
-      created_at: string;
-      updated_at: string;
-    }[];
-
-    const row = rows[0];
-    if (!row) return null;
-    return {
-      id: row.id,
-      agentId: row.agent_id,
-      title: row.title,
-      content: row.content,
-      tags: JSON.parse(row.tags) as string[],
-      importance: row.importance,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
+    return this.findById(id);
   }
 
   /**
@@ -251,6 +247,14 @@ export class MemoriesRepository {
           .run(id, agentId)
       : sqlite.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
     return result.changes > 0;
+  }
+
+  /** Delete every memory of `agentId` written by `source`; returns how many. */
+  async deleteBySource(agentId: string, source: MemorySource): Promise<number> {
+    const result = getRawSqlite(this.db)
+      .prepare(`DELETE FROM memories WHERE agent_id = ? AND source = ?`)
+      .run(agentId, source);
+    return Number(result.changes);
   }
 }
 

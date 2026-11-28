@@ -10,7 +10,7 @@ import {
   toAgentSummary,
 } from './schema';
 import type { CreateAgentInput } from '../types';
-import type { AgentIdentity } from '@aidyagent/shared-types';
+import type { AgentIdentity, ReasoningEffort } from '@aidyagent/shared-types';
 
 /**
  * Agent registry options
@@ -288,6 +288,34 @@ export class AgentRegistry {
       if (idx !== -1) {
         if (tools.length > 0) agents[idx]!['tools'] = tools;
         else delete agents[idx]!['tools'];
+      }
+    });
+    return toAgentSummary(updated);
+  }
+
+  /**
+   * Set or clear (undefined = model default) an agent's default thinking
+   * effort, in memory and in aidy.json. Returns the updated summary, or
+   * undefined if the agent was not found.
+   */
+  updateAgentReasoningEffort(
+    agentId: string,
+    reasoningEffort: ReasoningEffort | undefined,
+  ): AgentSummary | undefined {
+    this.ensureLoaded();
+    const agent = this.agents.get(agentId);
+    if (!agent) return undefined;
+
+    const { reasoningEffort: _previous, ...rest } = agent;
+    const updated: Agent = reasoningEffort
+      ? { ...rest, reasoningEffort }
+      : rest;
+    this.agents.set(agentId, updated);
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      if (idx !== -1) {
+        if (reasoningEffort) agents[idx]!['reasoningEffort'] = reasoningEffort;
+        else delete agents[idx]!['reasoningEffort'];
       }
     });
     return toAgentSummary(updated);

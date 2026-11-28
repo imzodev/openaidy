@@ -6,10 +6,14 @@ import type {
   AgentIdentity,
   McpServerRef,
   PersonalityFileId,
+  ReasoningEffort,
 } from '@aidyagent/shared-types';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import { PERSONALITY_FILES } from '../agents/personality-service';
-import { AGENT_PERSONALITY_PRESETS } from '@aidyagent/shared-types';
+import {
+  AGENT_PERSONALITY_PRESETS,
+  REASONING_EFFORT_VALUES,
+} from '@aidyagent/shared-types';
 import { IdentitySchema } from '../agents/schema';
 import { requireAuth } from '../middleware/require-auth';
 
@@ -243,6 +247,37 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
       return { error: 'Agent not found', agentId };
     }
 
+    return result;
+  });
+
+  /**
+   * PATCH /agents/:agentId/reasoning-effort
+   * Set the agent's default thinking effort, or clear it with null.
+   * Body: { reasoningEffort: 'off' | 'low' | 'medium' | 'high' | 'max' | null }
+   */
+  app.patch('/agents/:agentId/reasoning-effort', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    const body = request.body as { reasoningEffort?: unknown } | undefined;
+    const value = body?.reasoningEffort;
+
+    if (
+      value !== null &&
+      !REASONING_EFFORT_VALUES.includes(value as ReasoningEffort)
+    ) {
+      reply.code(400);
+      return {
+        error: `Invalid request: reasoningEffort must be one of ${REASONING_EFFORT_VALUES.join(', ')} or null`,
+      };
+    }
+
+    const result = agentRegistry.updateAgentReasoningEffort(
+      agentId,
+      value === null ? undefined : (value as ReasoningEffort),
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
     return result;
   });
 

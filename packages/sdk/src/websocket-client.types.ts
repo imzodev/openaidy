@@ -189,6 +189,8 @@ export type MessageOptions = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
+  /** Thinking effort for this message; absent = the agent's default. */
+  reasoningEffort?: import('@aidyagent/shared-types').ReasoningEffort;
   /** Ids of previously-uploaded attachments to link to this message */
   attachmentIds?: string[];
   metadata?: Record<string, unknown>;
