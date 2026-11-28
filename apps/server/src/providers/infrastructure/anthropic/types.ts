@@ -101,6 +101,8 @@ export type AnthropicMessagesRequest = {
     | { type: 'tool'; name: string };
   stream?: boolean;
   metadata?: Record<string, unknown>;
+  /** Thinking depth and overall token spend (Claude 4.6+). */
+  output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
 };
 
 /**

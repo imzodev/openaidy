@@ -236,6 +236,46 @@ describe('Agent Routes', () => {
     });
   });
 
+  describe('PATCH /agents/:agentId/reasoning-effort', () => {
+    it('sets and clears the default thinking effort', async () => {
+      const set = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/reasoning-effort',
+        payload: { reasoningEffort: 'high' },
+      });
+      expect(set.statusCode).toBe(200);
+      expect(set.json().reasoningEffort).toBe('high');
+
+      const cleared = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/reasoning-effort',
+        payload: { reasoningEffort: null },
+      });
+      expect(cleared.statusCode).toBe(200);
+      expect(cleared.json().reasoningEffort).toBeUndefined();
+    });
+
+    it('rejects unknown values and a missing field', async () => {
+      for (const payload of [{ reasoningEffort: 'turbo' }, {}]) {
+        const response = await app.inject({
+          method: 'PATCH',
+          url: '/api/agents/default/reasoning-effort',
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    });
+
+    it('returns 404 for an unknown agent', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/nope/reasoning-effort',
+        payload: { reasoningEffort: 'low' },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe('PATCH /agents/:agentId/tools', () => {
     it('should update tools for an agent and return updated summary', async () => {
       const response = await app.inject({

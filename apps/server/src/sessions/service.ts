@@ -44,7 +44,14 @@ import type {
   ModelPricing,
   CompactionSummaryMetadata,
 } from '@aidyagent/shared-types';
-import { estimateCost, COMPACTION_SUMMARY_KIND } from '@aidyagent/shared-types';
+import {
+  estimateCost,
+  COMPACTION_SUMMARY_KIND,
+  REASONING_EFFORT_VALUES,
+  clampReasoningEffort,
+  resolveReasoningSupport,
+  type ReasoningEffort,
+} from '@aidyagent/shared-types';
 import { READ_ONLY_BUILTIN_TOOLS } from '../tools/catalog.js';
 import { ToolCallGuard } from './tool-call-guard.js';
 import { findPresetModel } from '../providers/model-limits.js';
@@ -317,6 +324,25 @@ export class SessionMessageService {
       this.logger?.warn({ err }, 'Could not resolve the prompt context');
       return { timezone: 'UTC' };
     }
+  }
+
+  /**
+   * The thinking effort a run sends: the message's choice, else the agent's
+   * default, clamped to what the model supports. Undefined (send nothing)
+   * for models with no known thinking control or an unknown value from the
+   * wire, so a chat can never be broken by a parameter its model rejects.
+   */
+  private resolveReasoningEffort(
+    modelId: string,
+    requested: unknown,
+    agentDefault: ReasoningEffort | undefined,
+  ): ReasoningEffort | undefined {
+    const choice = REASONING_EFFORT_VALUES.includes(
+      requested as ReasoningEffort,
+    )
+      ? (requested as ReasoningEffort)
+      : agentDefault;
+    return clampReasoningEffort(resolveReasoningSupport(modelId), choice);
   }
 
   /**
@@ -1169,9 +1195,15 @@ export class SessionMessageService {
       : historyMessages;
 
     // 6. Invoke provider
+    const reasoningEffort = this.resolveReasoningEffort(
+      modelId,
+      input.reasoningEffort,
+      agent?.reasoningEffort,
+    );
     const modelRequest: ModelRequest = {
       model: modelId,
       messages,
+      ...(reasoningEffort && { reasoningEffort }),
     };
 
     // Build invocation options: client overrides take priority, then agent-resolved values
@@ -1834,6 +1866,12 @@ export class SessionMessageService {
       providerId: input.providerId ?? providerId,
       modelId: input.modelId ?? modelId,
     };
+    // Same for every round of the loop.
+    const reasoningEffort = this.resolveReasoningEffort(
+      modelId,
+      input.reasoningEffort,
+      agent?.reasoningEffort,
+    );
 
     let accumulatedContent = '';
     // Usage accumulated across all tool-call rounds — each round is a
@@ -1983,6 +2021,7 @@ export class SessionMessageService {
           model: modelId,
           messages: loopMessages,
           ...(offerTools && { tools: allTools, toolChoice: 'auto' }),
+          ...(reasoningEffort && { reasoningEffort }),
           // Run-level cancel: aborting this signal cancels the provider fetch.
           signal: runController.signal,
         };

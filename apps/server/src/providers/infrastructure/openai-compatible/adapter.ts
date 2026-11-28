@@ -22,6 +22,7 @@ import {
 import type { OpenAICompatibleAdapterConfig } from './types';
 import { createLogger } from '../../../lib/logger';
 import { mergeLeadingSystemMessages } from './request-mapper';
+import { reasoningRequestParams } from './reasoning.js';
 import {
   IdentityAdapterCodec,
   DeepSeekAdapterCodec,
@@ -372,6 +373,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
         max_tokens: request.maxTokens ?? null,
         stream: false,
       };
+      // Fields the SDK types don't know (DeepSeek's `thinking`) still go
+      // out: the SDK sends the body as given.
+      Object.assign(
+        requestParams,
+        reasoningRequestParams(modelId, request.reasoningEffort),
+      );
 
       if (tools) {
         requestParams.tools = tools;
@@ -457,6 +464,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
         // (OpenAI, DeepSeek, OpenCode Zen, etc. all honor this flag).
         stream_options: { include_usage: true },
       };
+      Object.assign(
+        requestParams,
+        reasoningRequestParams(modelId, request.reasoningEffort),
+      );
 
       if (tools) {
         requestParams.tools = tools;

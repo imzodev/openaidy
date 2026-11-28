@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import {
   AGENT_IDENTITY_HEX_COLOR_PATTERN,
+  REASONING_EFFORT_VALUES,
   type AgentIdentity,
   type McpServerRef,
+  type ReasoningEffort,
 } from '@aidyagent/shared-types';
 
 /**
@@ -134,6 +136,9 @@ export const AgentSchema = z.object({
   // fresh install can ship an agent with no model; it inherits the config
   // default at runtime (set once the first provider is connected).
   model: z.string().min(1).optional(),
+  // Default thinking effort for this agent's runs; absent = model default.
+  // A chat can override it per conversation.
+  reasoningEffort: z.enum(REASONING_EFFORT_VALUES).optional(),
   description: z.string().optional(),
 
   // MCP server references - tools from external MCP server processes
@@ -183,6 +188,7 @@ export type AgentSummary = {
   skills: string[] | undefined;
   mcpServers: McpServerRef[] | undefined;
   model: string | undefined; // Format: "providerId/modelId"; undefined = inherit config default
+  reasoningEffort?: ReasoningEffort | undefined;
   workspace?: WorkspaceConfig | undefined;
   identity?: AgentIdentity | undefined;
 };
@@ -252,6 +258,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     skills: agent.skills,
     mcpServers: agent.mcpServers,
     model: agent.model,
+    reasoningEffort: agent.reasoningEffort,
     workspace: agent.workspace,
     identity: agent.identity,
   };

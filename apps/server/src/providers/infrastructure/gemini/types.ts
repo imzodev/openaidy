@@ -129,6 +129,8 @@ export type GeminiGenerationConfig = {
   maxOutputTokens?: number;
   stopSequences?: string[];
   responseMimeType?: string;
+  /** How much the model thinks: a token budget (2.5) or a level (3.x). */
+  thinkingConfig?: { thinkingBudget?: number; thinkingLevel?: 'low' | 'high' };
 };
 
 /**

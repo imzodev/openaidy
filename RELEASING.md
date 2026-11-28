@@ -34,13 +34,13 @@ Pre-1.0, treat minor as "features or breaking changes" and patch as "fixes".
 
 Pushing the `v*.*.*` tag triggers `.github/workflows/release.yml`:
 
-| Job                         | Needs                         | What it does                                                                                                                              |
-| --------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `gate`                      | —                             | Re-runs ESLint, typecheck/build and tests.                                                                                                |
-| `publish-npm`               | `gate`                        | Builds `build/npm` (`pnpm build:npm`) and publishes `@aidyagent/app` via npm trusted publishing (OIDC). Skips if the version already exists. |
-| `build-desktop`             | `gate`                        | Builds the Tauri desktop installers for Windows, macOS and Linux (best-effort, one platform failing doesn't block the others).            |
-| `release`                   | `gate`, `publish-npm`         | Creates the GitHub Release with auto-generated notes. **Only runs if the npm publish succeeded.**                                         |
-| `attach-desktop-installers` | `release`, `build-desktop`    | Uploads whichever desktop installers built to the release.                                                                                |
+| Job                         | Needs                      | What it does                                                                                                                                 |
+| --------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gate`                      | —                          | Re-runs ESLint, typecheck/build and tests.                                                                                                   |
+| `publish-npm`               | `gate`                     | Builds `build/npm` (`pnpm build:npm`) and publishes `@aidyagent/app` via npm trusted publishing (OIDC). Skips if the version already exists. |
+| `build-desktop`             | `gate`                     | Builds the Tauri desktop installers for Windows, macOS and Linux (best-effort, one platform failing doesn't block the others).               |
+| `release`                   | `gate`, `publish-npm`      | Creates the GitHub Release with auto-generated notes. **Only runs if the npm publish succeeded.**                                            |
+| `attach-desktop-installers` | `release`, `build-desktop` | Uploads whichever desktop installers built to the release.                                                                                   |
 
 If the workflow fails after the gate, fix the cause and re-run it from the
 Actions tab (**Run workflow** → enter the existing tag). Every step is

@@ -31,6 +31,7 @@ import {
   listAgents,
   listBuiltinTools,
   updateAgentTools,
+  updateAgentReasoningEffort,
   listAgentSkills,
   updateAgentSkills,
   listMcpServers,
@@ -50,6 +51,12 @@ import {
   type PersonalityFile,
 } from '../../lib/api';
 import { CreateAgentModal } from './CreateAgentModal';
+import {
+  REASONING_EFFORT_LABELS,
+  REASONING_EFFORT_VALUES,
+  resolveReasoningSupport,
+  type ReasoningEffort,
+} from '@aidyagent/shared-types';
 import {
   FileExplorer,
   WorkspaceEditor,
@@ -407,6 +414,28 @@ export function AgentsPage(props: AgentsPageProps) {
       .catch(() => setAllMcpServers([]));
   });
 
+  const [reasoningError, setReasoningError] = createSignal<string | null>(null);
+  const handleReasoningEffortChange = async (value: string) => {
+    const agent = selectedAgent();
+    if (!agent) return;
+    const effort = REASONING_EFFORT_VALUES.includes(value as ReasoningEffort)
+      ? (value as ReasoningEffort)
+      : undefined;
+    setReasoningError(null);
+    try {
+      await updateAgentReasoningEffort(agent.id, effort ?? null);
+      // Refetch rather than patch locally: the chat reads agents from the
+      // shared ['agents'] cache, which must hold the server's response.
+      const response = await listAgents();
+      setAgents(response.items);
+      queryClient.setQueryData(['agents'], response);
+    } catch (err) {
+      setReasoningError(
+        err instanceof Error ? err.message : "Couldn't save thinking effort",
+      );
+    }
+  };
+
   const handleToggleTool = async (toolName: string) => {
     const agent = selectedAgent();
     if (!agent) return;
@@ -679,6 +708,41 @@ export function AgentsPage(props: AgentsPageProps) {
                     {selectedAgent()!.model}
                   </code>
                 </div>
+
+                {/* Default thinking effort, for models with a known control */}
+                <Show when={resolveReasoningSupport(selectedAgent()!.model)}>
+                  {(support) => (
+                    <div class="mt-2 flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                      <label class="font-medium" for="agent-reasoning-effort">
+                        Thinking:
+                      </label>
+                      <select
+                        id="agent-reasoning-effort"
+                        class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs border-none focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        value={selectedAgent()!.reasoningEffort ?? ''}
+                        onChange={(e) =>
+                          void handleReasoningEffortChange(
+                            e.currentTarget.value,
+                          )
+                        }
+                      >
+                        <option value="">Model default</option>
+                        <For each={support().levels}>
+                          {(level) => (
+                            <option value={level}>
+                              {REASONING_EFFORT_LABELS[level]}
+                            </option>
+                          )}
+                        </For>
+                      </select>
+                      <Show when={reasoningError()}>
+                        <span class="text-red-600 dark:text-red-400">
+                          {reasoningError()}
+                        </span>
+                      </Show>
+                    </div>
+                  )}
+                </Show>
               </div>
 
               {/* Tabs — horizontally scrollable on small screens */}

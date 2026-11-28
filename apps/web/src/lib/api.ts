@@ -367,6 +367,32 @@ export async function updateAgentTools(
 }
 
 /**
+ * Set an agent's default thinking effort, or clear it (null = the model's
+ * default). Chats can still override it per conversation.
+ */
+export async function updateAgentReasoningEffort(
+  agentId: string,
+  reasoningEffort: import('@aidyagent/shared-types').ReasoningEffort | null,
+): Promise<Agent> {
+  const response = await apiFetch(
+    `${API_BASE}/api/agents/${agentId}/reasoning-effort`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reasoningEffort }),
+    },
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to update thinking effort: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+/**
  * List MCP server references configured for an agent
  */
 export async function listAgentMcpServers(
