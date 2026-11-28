@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Aidy">
+  <defs>
+    <linearGradient id="aidy-bg" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#5ac8fa"/>
+      <stop offset="1" stop-color="#007aff"/>
+    </linearGradient>
+    <linearGradient id="aidy-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path d="M64 0c40.8 0 51.9 0 58 6s6 17.2 6 58 0 51.9-6 58-17.2 6-58 6-51.9 0-58-6-6-17.2-6-58 0-51.9 6-58S23.2 0 64 0z" fill="url(#aidy-bg)"/>
+  <path d="M64 0c40.8 0 51.9 0 58 6s6 17.2 6 58 0 51.9-6 58-17.2 6-58 6-51.9 0-58-6-6-17.2-6-58 0-51.9 6-58S23.2 0 64 0z" fill="url(#aidy-sheen)"/>
+  <path d="M94.88 63.3 A31 31 0 1 1 69.38 35.47" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="86.86" cy="45.06" r="9.5" fill="#ffffff"/>
+</svg>

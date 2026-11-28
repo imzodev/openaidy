@@ -1,19 +1,17 @@
-import { FloatingOrbs } from '../components/ui';
 import { Hero } from '../components/sections/Hero';
-import { MarqueeSection } from '../components/sections/MarqueeSection';
+import { Bento } from '../components/sections/Bento';
 import { Story } from '../components/story/Story';
-import { Showcase } from '../components/sections/Showcase';
-import { CTA } from '../components/sections/CTA';
+import { Privacy } from '../components/sections/Privacy';
+import { Install } from '../components/sections/Install';
 
 export default function Home() {
   return (
     <>
-      <FloatingOrbs />
       <Hero />
-      <MarqueeSection />
+      <Bento />
       <Story />
-      <Showcase />
-      <CTA />
+      <Privacy />
+      <Install />
     </>
   );
 }
