@@ -528,6 +528,9 @@ export class SessionHandler {
         ...(resolvedAgentId != null && { agentId: resolvedAgentId }),
         ...(resolvedProviderId != null && { providerId: resolvedProviderId }),
         ...(resolvedModelId != null && { modelId: resolvedModelId }),
+        ...(request.payload.reasoningEffort && {
+          reasoningEffort: request.payload.reasoningEffort,
+        }),
         ...(request.payload.attachmentIds?.length && {
           attachmentIds: request.payload.attachmentIds,
         }),
@@ -720,6 +723,9 @@ export class SessionHandler {
         runId,
         ...(providerId != null && { providerId }),
         ...(modelId != null && { modelId }),
+        ...(request.payload.reasoningEffort && {
+          reasoningEffort: request.payload.reasoningEffort,
+        }),
         ...(request.payload.attachmentIds?.length && {
           attachmentIds: request.payload.attachmentIds,
         }),

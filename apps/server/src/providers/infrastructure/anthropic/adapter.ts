@@ -31,6 +31,7 @@ import {
   extractStopReasonFromDelta,
 } from './response-mapper';
 import { normalizeError, isAnthropicError } from './error-normalizer';
+import { gatewayHeaders } from '../gateway-headers.js';
 import type {
   AnthropicAdapterConfig,
   AnthropicMessagesResponse,
@@ -270,7 +271,10 @@ export class AnthropicProvider implements ModelProvider {
 
       const response = await this.fetch(`${this.config.baseUrl}/messages`, {
         method: 'POST',
-        headers: await this.getHeaders(),
+        headers: {
+          ...(await this.getHeaders()),
+          ...gatewayHeaders(this.config.baseUrl, request.sessionId),
+        },
         body: JSON.stringify(anthropicRequest),
         signal: this.createAbortSignal(request.signal),
       });
@@ -360,7 +364,11 @@ export class AnthropicProvider implements ModelProvider {
 
       const response = await this.fetch(`${this.config.baseUrl}/messages`, {
         method: 'POST',
-        headers: { ...(await this.getHeaders()), Accept: 'text/event-stream' },
+        headers: {
+          ...(await this.getHeaders()),
+          ...gatewayHeaders(this.config.baseUrl, request.sessionId),
+          Accept: 'text/event-stream',
+        },
         body: JSON.stringify(anthropicRequest),
         signal: this.createAbortSignal(request.signal),
       });

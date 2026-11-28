@@ -77,6 +77,26 @@ Each session or dispatch call can specify:
 - `model` — optionally override the model for this run
 - `temperature` — control response randomness
 - `maxTokens` — cap response length
+- `reasoningEffort` — how hard the model thinks (see below)
+
+## Thinking effort
+
+How hard the model thinks before answering: **Auto** (the model's own default), **Off**, **Low**, **Medium**, **High** or **Max**.
+
+- **Per agent:** the agent's detail panel on the Agents page has a **Thinking** setting (`reasoningEffort` in the agent's config). Pulses, reminders and workflows run with it too.
+- **Per conversation:** the brain button next to the agent picker in the chat overrides it for that conversation (remembered in the browser). On mobile it's icon-only.
+
+Only models whose thinking control is documented show the setting, and each shows only the levels it accepts. A level the model lacks moves to the closest one (DeepSeek has no Medium, so it uses High). Other models get nothing sent, so a parameter they'd reject can never break a chat.
+
+| Models | What is sent |
+| --- | --- |
+| DeepSeek V4, `deepseek-reasoner` (direct or through a gateway such as OpenCode Go) | `thinking.type` (`disabled` for Off) + `reasoning_effort` (`low` / `high` / `max`) |
+| OpenAI o-series | `reasoning_effort` (`low` / `medium` / `high`) |
+| Gemini 2.5 | `thinkingConfig.thinkingBudget` (0 for Off on Flash; Pro can't turn thinking off) |
+| Gemini 3 | `thinkingConfig.thinkingLevel` (`low` / `high`) |
+| Claude 4.6+ and 5.x | `output_config.effort`. Thinking itself isn't turned on yet, so this tunes depth and token spend |
+
+Other families (MiMo, GLM, Kimi, Qwen, MiniMax) are left out until their parameters are confirmed; they're added in `REASONING_MODEL_RULES` (`packages/shared-types/src/reasoning.ts`).
 
 ## Skills
 

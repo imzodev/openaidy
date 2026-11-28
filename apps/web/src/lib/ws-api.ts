@@ -208,6 +208,9 @@ export async function submitMessage(
         agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
+        ...(input.reasoningEffort
+          ? { reasoningEffort: input.reasoningEffort }
+          : {}),
         ...(input.attachmentIds?.length
           ? { attachmentIds: input.attachmentIds }
           : {}),
@@ -282,6 +285,9 @@ export async function submitMessageStreaming(
         agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
+        ...(input.reasoningEffort
+          ? { reasoningEffort: input.reasoningEffort }
+          : {}),
         ...(input.attachmentIds?.length
           ? { attachmentIds: input.attachmentIds }
           : {}),

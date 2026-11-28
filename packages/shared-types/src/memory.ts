@@ -16,19 +16,26 @@ export type Memory = {
   content: string;
   tags: string[];
   importance: number; // 1–5
+  source: MemorySource;
+  kind: MemoryKind | null;
+  /** The conversation a learned fact came from. */
+  sourceSessionId: string | null;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 };
 
 /**
  * Input for creating a new memory entry.
- * `tags` defaults to [] and `importance` defaults to 3.
+ * `tags` defaults to [], `importance` to 3 and `source` to 'agent'.
  */
 export type CreateMemoryInput = {
   title: string;
   content: string;
   tags?: string[];
   importance?: number; // defaults to 3
+  source?: MemorySource;
+  kind?: MemoryKind;
+  sourceSessionId?: string;
 };
 
 /**
@@ -40,6 +47,7 @@ export type UpdateMemoryInput = {
   content?: string;
   tags?: string[];
   importance?: number; // 1–5
+  kind?: MemoryKind;
 };
 
 /**
@@ -59,4 +67,89 @@ export type MemoryAgentSummary = {
   id: string;
   name: string;
   count: number;
+};
+
+/**
+ * The `agentId` scope that holds what Aidy knows about its owner. Shared by
+ * every agent (unlike per-agent memories) and filled mostly by background
+ * learning from the owner's own conversations.
+ */
+export const OWNER_MEMORY_AGENT_ID = '__owner__';
+
+/** Who wrote a memory. */
+export const MEMORY_SOURCE_VALUES = ['agent', 'learned', 'user'] as const;
+export type MemorySource = (typeof MEMORY_SOURCE_VALUES)[number];
+
+/** What a learned fact about the owner is. */
+export const MEMORY_KIND_VALUES = [
+  'preference',
+  'fact',
+  'person',
+  'routine',
+  'goal',
+] as const;
+export type MemoryKind = (typeof MEMORY_KIND_VALUES)[number];
+
+/** One change the learning pass proposes to the owner's memories. */
+export type LearnedMemoryOp =
+  | {
+      op: 'add';
+      kind: MemoryKind;
+      title: string;
+      content: string;
+      importance: number;
+    }
+  | { op: 'update'; id: string; content: string; importance?: number }
+  | { op: 'forget'; id: string };
+
+/** How far the learning pass has read a session. */
+export type MemoryLearningCursor = {
+  sessionId: string;
+  throughSequence: number;
+  updatedAt: string;
+};
+
+/** A chat session with turns the learning pass hasn't read yet. */
+export type MemoryLearningCandidate = {
+  sessionId: string;
+  agentId: string | null;
+  throughSequence: number;
+  lastSequence: number;
+};
+
+/** A `memories` row as SQLite returns it (snake_case, tags as JSON). */
+export type MemoryRow = {
+  id: string;
+  agent_id: string;
+  title: string;
+  content: string;
+  tags: string;
+  importance: number;
+  source: string;
+  kind: string | null;
+  source_session_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A `memory_learning_state` row as SQLite returns it. */
+export type MemoryLearningStateRow = {
+  session_id: string;
+  through_sequence: number;
+  updated_at: string;
+};
+
+/** A learning candidate as the candidate query returns it. */
+export type MemoryLearningCandidateRow = {
+  session_id: string;
+  agent_id: string | null;
+  through_sequence: number;
+  last_sequence: number;
+};
+
+/** What one learning pass changed. */
+export type MemoryLearningOutcome = {
+  added: number;
+  updated: number;
+  forgotten: number;
 };

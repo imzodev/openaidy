@@ -216,3 +216,12 @@ export type MessagePage<T> = {
   total: number;
   nextOffset: number | null;
 };
+
+/**
+ * Who wrote a user-role message when it wasn't the person in the chat.
+ * Stored as `metadata.origin`: scheduler prompts (pulses, reminders, the
+ * briefing) and work one agent hands another are marked so background
+ * learning doesn't mistake them for things the owner said.
+ */
+export const MESSAGE_ORIGIN_VALUES = ['scheduler', 'agent'] as const;
+export type MessageOrigin = (typeof MESSAGE_ORIGIN_VALUES)[number];

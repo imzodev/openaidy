@@ -15,6 +15,11 @@ import type {
   GeminiSafetySetting,
 } from './types';
 import { sanitizeGeminiFunctionName } from './name-mapping';
+import {
+  clampReasoningEffort,
+  resolveReasoningSupport,
+  type ReasoningEffort,
+} from '@aidyagent/shared-types';
 
 // =====================
 // Message Mapping
@@ -368,6 +373,43 @@ export function mapToolChoice(
 // Generation Config Mapping
 // =====================
 
+/** Thinking budgets (tokens) for Gemini 2.5; 0 turns thinking off on Flash. */
+const GEMINI_THINKING_BUDGET: Record<ReasoningEffort, number> = {
+  off: 0,
+  low: 1_024,
+  medium: 8_192,
+  high: 24_576,
+  max: 24_576,
+};
+/** Gemini 2.5 Pro allows a larger budget. */
+const GEMINI_PRO_HIGH_BUDGET = 32_768;
+
+/**
+ * `thinkingConfig` for the requested effort, or undefined to leave the
+ * model's default. Gemini 2.5 takes a token budget and errors on
+ * `thinkingLevel`; Gemini 3 takes a level.
+ */
+export function mapThinkingConfig(
+  request: ModelRequest,
+): GeminiGenerationConfig['thinkingConfig'] {
+  const support = resolveReasoningSupport(request.model);
+  const effort = clampReasoningEffort(support, request.reasoningEffort);
+  if (!effort || !support) return undefined;
+  if (support.style === 'gemini-level') {
+    return { thinkingLevel: effort === 'low' ? 'low' : 'high' };
+  }
+  if (support.style === 'gemini-budget') {
+    const isPro = /gemini-2\.5-pro/.test(request.model);
+    return {
+      thinkingBudget:
+        isPro && effort === 'high'
+          ? GEMINI_PRO_HIGH_BUDGET
+          : GEMINI_THINKING_BUDGET[effort],
+    };
+  }
+  return undefined;
+}
+
 /**
  * Maps request parameters to Gemini generation config
  */
@@ -394,6 +436,11 @@ export function mapGenerationConfig(
 
   if (request.topP !== undefined) {
     config.topP = request.topP;
+  }
+
+  const thinkingConfig = mapThinkingConfig(request);
+  if (thinkingConfig) {
+    config.thinkingConfig = thinkingConfig;
   }
 
   if (request.stopSequences !== undefined && request.stopSequences.length > 0) {

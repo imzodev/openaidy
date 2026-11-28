@@ -64,6 +64,7 @@ import {
 } from './routes/workflow-triggers';
 import { WorkflowTriggerService } from './tasks/triggers/service';
 import { AssistantService } from './assistant/service';
+import { MemoryLearningService } from './memory/learning-service.js';
 import { collectBriefingFacts } from './assistant/briefing';
 import { syncBriefing } from './assistant/briefing-sync';
 import type { OwnerConfig } from '@aidyagent/config';
@@ -379,6 +380,25 @@ export async function buildApp() {
 
   let planningService: ReturnType<typeof createPlanningService> | undefined;
 
+  // Owner, "now", and where scheduled prompts' answers go. Created once
+  // the channel registry exists (below); used lazily before that.
+  const assistantRef: { current: AssistantService | undefined } = {
+    current: undefined,
+  };
+  // A WhatsApp/Discord chat with someone other than the owner. Until the
+  // assistant exists nobody is known to be the owner, so a chat route
+  // counts as a customer: the safe side for the owner's private details.
+  const isCustomerSession = async (sessionId: string): Promise<boolean> => {
+    const assistant = assistantRef.current;
+    if (assistant) {
+      const { conversation } = await assistant.promptContext(sessionId);
+      return conversation ? !conversation.isOwner : false;
+    }
+    return Boolean(
+      await dbAdapter?.repositories.sessionChannels.find(sessionId),
+    );
+  };
+
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
     exec: execService,
@@ -401,6 +421,7 @@ export async function buildApp() {
             sessionsRepo: dbAdapter.repositories.sessions,
             defaultAgentId: configService.getConfig().defaults.agentId,
             createLogger,
+            isCustomerSession,
           },
           pulses: {
             getJobsRepo: () => dbAdapter!.repositories.jobs,
@@ -456,17 +477,16 @@ export async function buildApp() {
     | Record<string, import('@aidyagent/shared-types').ModelPricing>
     | undefined;
 
-  // Owner, "now", and where scheduled prompts' answers go. Created once
-  // the channel registry exists (below); used lazily before that.
-  const assistantRef: { current: AssistantService | undefined } = {
-    current: undefined,
-  };
+  const ownerMemoriesRepo = dbAdapter?.repositories.memories;
 
   sessionService = new SessionMessageService({
     getPromptContext: async (sessionId) =>
       assistantRef.current?.promptContext(sessionId) ?? {
         timezone: configService.getConfig().defaults.timezone ?? 'UTC',
       },
+    ...(ownerMemoriesRepo
+      ? { listOwnerMemories: () => ownerMemoriesRepo.listOwner() }
+      : {}),
     providers: providerServices,
     logger: pinoLog,
     agents: agentRegistry,
@@ -562,6 +582,43 @@ export async function buildApp() {
   });
   assistantRef.current = assistant;
   assistant.start();
+
+  const memoryLearning = dbAdapter
+    ? new MemoryLearningService({
+        memories: dbAdapter.repositories.memories,
+        learningState: dbAdapter.repositories.memoryLearningState,
+        sessionMessages: dbAdapter.repositories.sessionMessages,
+        sessionRuns: dbAdapter.repositories.sessionRuns,
+        isEnabled: () =>
+          configService.getConfig().owner?.memory?.learn !== false,
+        isCustomerSession,
+        complete: async (request, model) => {
+          try {
+            const result = await providerServices.invocation.invoke(
+              {
+                model: model.modelId,
+                messages: [
+                  { role: 'system', content: request.system },
+                  { role: 'user', content: request.user },
+                ],
+                maxTokens: request.maxTokens,
+              },
+              { providerId: model.providerId, modelId: model.modelId },
+            );
+            return result.ok
+              ? { ok: true, text: result.value.content }
+              : { ok: false, error: result.error.message };
+          } catch (err) {
+            return {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            };
+          }
+        },
+        logger: createLogger('MemoryLearning'),
+      })
+    : undefined;
+  memoryLearning?.start();
   const pulseHooks = {
     prepareMessage: (job: ScheduledJob) => assistant.preparePulseMessage(job),
     deliver: async (
@@ -1365,6 +1422,7 @@ export async function buildApp() {
 
   // Clean up on close
   app.addHook('onClose', async () => {
+    memoryLearning?.stop();
     await bootstrapAdmin?.stopAutoRenew();
     await backupJobs?.dispose();
     if (stuckSubtaskInterval) {

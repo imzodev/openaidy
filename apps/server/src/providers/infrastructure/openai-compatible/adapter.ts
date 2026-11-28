@@ -22,6 +22,8 @@ import {
 import type { OpenAICompatibleAdapterConfig } from './types';
 import { createLogger } from '../../../lib/logger';
 import { mergeLeadingSystemMessages } from './request-mapper';
+import { gatewayHeaders } from '../gateway-headers.js';
+import { reasoningRequestParams } from './reasoning.js';
 import {
   IdentityAdapterCodec,
   DeepSeekAdapterCodec,
@@ -329,6 +331,18 @@ export class OpenAICompatibleProvider implements ModelProvider {
   // Non-Streaming Invocation
   // =====================
 
+  /**
+   * Per-call SDK options: the caller's abort signal, plus the headers a
+   * gateway needs for this conversation (OpenCode Go's session id).
+   */
+  private requestOptions(request: ModelRequest) {
+    const headers = gatewayHeaders(this.config.baseUrl, request.sessionId);
+    return {
+      ...(request.signal ? { signal: request.signal } : {}),
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    };
+  }
+
   async invoke(request: ModelRequest): Promise<ProviderResult<ModelResponse>> {
     // Check capabilities
     if (
@@ -372,6 +386,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
         max_tokens: request.maxTokens ?? null,
         stream: false,
       };
+      // Fields the SDK types don't know (DeepSeek's `thinking`) still go
+      // out: the SDK sends the body as given.
+      Object.assign(
+        requestParams,
+        reasoningRequestParams(modelId, request.reasoningEffort),
+      );
 
       if (tools) {
         requestParams.tools = tools;
@@ -385,7 +405,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       );
       const response = await this.client.chat.completions.create(
         requestParams,
-        request.signal ? { signal: request.signal } : {},
+        this.requestOptions(request),
       );
 
       return ok(
@@ -457,6 +477,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
         // (OpenAI, DeepSeek, OpenCode Zen, etc. all honor this flag).
         stream_options: { include_usage: true },
       };
+      Object.assign(
+        requestParams,
+        reasoningRequestParams(modelId, request.reasoningEffort),
+      );
 
       if (tools) {
         requestParams.tools = tools;
@@ -467,7 +491,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       // its own per-request timeout (config.timeoutMs) alongside this.
       const stream = await this.client.chat.completions.create(
         requestParams,
-        request.signal ? { signal: request.signal } : {},
+        this.requestOptions(request),
       );
 
       let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' =

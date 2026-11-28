@@ -1,4 +1,5 @@
 import type { SessionMessage, SessionRun } from '@aidyagent/db';
+import type { MessageOrigin } from '@aidyagent/shared-types';
 import type { SessionMessageRecord, SessionRunRecord } from '../types';
 
 /**
@@ -16,6 +17,13 @@ export type SubmitMessageInput = {
    * message. The bytes were stored via POST /sessions/:id/attachments.
    */
   attachmentIds?: string[];
+  /**
+   * Thinking effort for this run; absent = the agent's default. Clamped to
+   * what the model supports, and dropped for models with no known control.
+   */
+  reasoningEffort?: import('@aidyagent/shared-types').ReasoningEffort;
+  /** Set when the message wasn't written by the person in the chat. */
+  origin?: MessageOrigin;
 };
 
 /**
@@ -138,6 +146,11 @@ export type SessionMessageServiceOptions = {
   getPromptContext?: (
     sessionId: string,
   ) => Promise<import('../prompts/build-system-prompt').PromptContext>;
+  /**
+   * What is known about the owner, for [ABOUT_THE_OWNER]. Only used when
+   * the conversation is with the owner; failures leave the block out.
+   */
+  listOwnerMemories?: () => Promise<import('@aidyagent/shared-types').Memory[]>;
   /** Attachment storage for image/audio chat media (requires DB) */
   attachments?: import('../attachments/service').AttachmentService;
   /**

@@ -27,6 +27,7 @@ export * from './repositories/deliverables';
 export * from './repositories/access-tokens';
 export * from './repositories/addons';
 export * from './repositories/memories';
+export * from './repositories/memory-learning-state';
 export * from './repositories/marketplace';
 export * from './repositories/provider-credentials';
 export * from './repositories/oauth-flow-state';

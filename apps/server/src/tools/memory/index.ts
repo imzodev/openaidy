@@ -12,6 +12,12 @@ export type MemoryToolDeps = {
   sessionsRepo: SessionsStore;
   defaultAgentId: string;
   createLogger: typeof createLogger;
+  /**
+   * Whether a session is a chat with a customer. There, what is known about
+   * the owner is neither searchable nor writable, so a customer can't read
+   * or plant facts about the owner through the agent.
+   */
+  isCustomerSession?: (sessionId: string) => Promise<boolean>;
 };
 
 export function createMemoryTools(deps: MemoryToolDeps): BuiltinTool[] {

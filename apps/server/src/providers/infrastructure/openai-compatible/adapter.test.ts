@@ -1122,3 +1122,57 @@ describe('Factory functions', () => {
     expect(provider.descriptor.name).toBe('Ollama');
   });
 });
+
+describe('OpenAICompatibleProvider — OpenCode Go session header', () => {
+  let mockCreateCompletion: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockCreateCompletion = (await getMockFunctions()).mockCreateCompletion;
+    mockCreateCompletion.mockResolvedValue({
+      id: 'chatcmpl_1',
+      object: 'chat.completion',
+      created: 1700000000,
+      model: 'deepseek-v4-flash',
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: 'ok' },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    });
+  });
+
+  const request = (sessionId?: string): ModelRequest => ({
+    model: 'deepseek-v4-flash',
+    messages: [{ role: 'user', content: 'hi' }],
+    ...(sessionId ? { sessionId } : {}),
+  });
+
+  it('sends the conversation as x-opencode-session, plus our own User-Agent', async () => {
+    const provider = createOpenAICompatibleProvider({
+      apiKey: 'k',
+      baseUrl: 'https://opencode.ai/zen/go/v1',
+    });
+    await provider.invoke(request('abc_123'));
+    const options = mockCreateCompletion.mock.calls[0]![1] as {
+      headers?: Record<string, string>;
+    };
+    expect(options.headers?.['x-opencode-session']).toBe('ses_abc_123');
+    expect(options.headers?.['User-Agent']).toMatch(/^aidy\//);
+  });
+
+  it('sends no gateway headers to other providers', async () => {
+    const provider = createOpenAICompatibleProvider({
+      apiKey: 'k',
+      baseUrl: 'https://api.deepseek.com/v1',
+    });
+    await provider.invoke(request('abc'));
+    const options = mockCreateCompletion.mock.calls[0]![1] as {
+      headers?: Record<string, string>;
+    };
+    expect(options.headers).toBeUndefined();
+  });
+});

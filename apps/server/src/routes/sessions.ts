@@ -4,6 +4,7 @@ import { SessionMessageService } from '../sessions/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { MAX_ATTACHMENT_IDS_PER_MESSAGE } from '../attachments/service';
+import { REASONING_EFFORT_VALUES } from '@aidyagent/shared-types';
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
@@ -33,6 +34,7 @@ const submitMessageSchema = z
     agentId: z.string().optional(),
     providerId: z.string().optional(),
     modelId: z.string().optional(),
+    reasoningEffort: z.enum(REASONING_EFFORT_VALUES).optional(),
     attachmentIds: z
       .array(z.string())
       .max(MAX_ATTACHMENT_IDS_PER_MESSAGE)
@@ -262,6 +264,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
       ...(body.agentId !== undefined && { agentId: body.agentId }),
       ...(body.providerId !== undefined && { providerId: body.providerId }),
       ...(body.modelId !== undefined && { modelId: body.modelId }),
+      ...(body.reasoningEffort !== undefined && {
+        reasoningEffort: body.reasoningEffort,
+      }),
       ...(body.attachmentIds !== undefined && {
         attachmentIds: body.attachmentIds,
       }),

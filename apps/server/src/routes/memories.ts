@@ -1,7 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { MemoriesStore } from '@aidyagent/db';
-import type { UpdateMemoryInput } from '@aidyagent/shared-types';
+import {
+  OWNER_MEMORY_AGENT_ID,
+  type UpdateMemoryInput,
+} from '@aidyagent/shared-types';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
@@ -57,16 +60,24 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (
   /**
    * GET /memories/agents
    * Agents paired with their memory counts, for the left-rail selector.
-   * Includes agents with zero memories, plus any orphaned agentIds that still
-   * own memories but are no longer registered.
+   * "About you" (what is known about the owner, shared by every agent)
+   * comes first, then agents with zero or more memories, plus any orphaned
+   * agentIds that still own memories but are no longer registered.
    */
   app.get('/memories/agents', async () => {
     const counts = await memoriesRepo.countByAgent();
-    const items = agentRegistry.listAllAgents().map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-      count: counts[agent.id] ?? 0,
-    }));
+    const items = [
+      {
+        id: OWNER_MEMORY_AGENT_ID,
+        name: 'About you',
+        count: counts[OWNER_MEMORY_AGENT_ID] ?? 0,
+      },
+      ...agentRegistry.listAllAgents().map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        count: counts[agent.id] ?? 0,
+      })),
+    ];
 
     const known = new Set(items.map((a) => a.id));
     for (const [agentId, count] of Object.entries(counts)) {
@@ -97,7 +108,13 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (
 
     const term = query.q?.trim();
     const items = term
-      ? await memoriesRepo.search(term, query.agentId, query.limit)
+      ? await memoriesRepo.search(
+          term,
+          query.agentId,
+          query.limit,
+          // An agent's own list shouldn't mix in the shared owner facts.
+          !query.agentId || query.agentId === OWNER_MEMORY_AGENT_ID,
+        )
       : await memoriesRepo.list(query.agentId, query.limit);
 
     return { items };
@@ -119,7 +136,10 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (
       };
     }
 
-    if (!agentRegistry.hasAgent(body.agentId)) {
+    if (
+      body.agentId !== OWNER_MEMORY_AGENT_ID &&
+      !agentRegistry.hasAgent(body.agentId)
+    ) {
       reply.code(400);
       return { error: 'Unknown agent', agentId: body.agentId };
     }
@@ -132,6 +152,7 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (
       content: body.content,
       ...(body.tags !== undefined ? { tags: body.tags } : {}),
       ...(body.importance !== undefined ? { importance: body.importance } : {}),
+      source: 'user',
     });
     reply.code(201);
     return memory;
@@ -167,6 +188,19 @@ export const memoryRoutes: FastifyPluginAsync<MemoryRoutesOptions> = async (
       return { error: 'Memory not found', id };
     }
     return updated;
+  });
+
+  /**
+   * DELETE /memories/learned
+   * Forget everything learned about the owner from conversations. What the
+   * owner or an agent wrote on purpose is kept.
+   */
+  app.delete('/memories/learned', async () => {
+    const deleted = await memoriesRepo.deleteBySource(
+      OWNER_MEMORY_AGENT_ID,
+      'learned',
+    );
+    return { deleted };
   });
 
   /**

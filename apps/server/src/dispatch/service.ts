@@ -343,6 +343,7 @@ export class DispatchService {
     const modelRequest: ModelRequest = {
       model: config.modelId,
       messages,
+      sessionId: input.sessionId,
       ...(config.temperature !== undefined && {
         temperature: config.temperature,
       }),
@@ -499,6 +500,7 @@ export class DispatchService {
     const modelRequest: ModelRequest = {
       model: config.modelId,
       messages,
+      sessionId: input.sessionId,
       stream: true,
       ...(config.temperature !== undefined && {
         temperature: config.temperature,
