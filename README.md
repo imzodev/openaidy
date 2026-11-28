@@ -1,11 +1,19 @@
 <p align="center">
-  <img src="./docs/assets/banner.png" alt="Aidy — Open Source AI Agent Platform" width="892" />
+  <img src="./docs/assets/banner.png" alt="Aidy — your self-hosted AI team" width="800" />
 </p>
 
-# Aidy — OpenAI Do-it Yourself
+<h1 align="center">Aidy</h1>
 
-> **The open source AI agent platform for self-hosting, automating, and extending your own AI operations.**
-> Plugin-first. Real-time. MCP-native. MIT licensed.
+<p align="center">
+  <strong>Your self-hosted AI team.</strong> Always-on agents that do the work, remember how you like it, and reach you on WhatsApp.<br />
+  Open source · Any model · Plugin-first · MCP-native · MIT licensed
+</p>
+
+<p align="center">
+  <a href="https://aidyagent.app"><strong>aidyagent.app</strong></a> ·
+  <a href="https://aidyagent.app/docs">Docs</a> ·
+  <a href="https://github.com/imzodev/aidy/releases/latest">Desktop app</a>
+</p>
 
 <p align="center">
   <a href="https://github.com/imzodev/aidy/blob/main/LICENSE"><img src="https://img.shields.io/github/license/imzodev/aidy?style=flat-square&color=blue" alt="License: MIT" /></a>

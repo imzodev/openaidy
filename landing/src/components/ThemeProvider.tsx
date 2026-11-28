@@ -2,14 +2,25 @@ import { useLayoutEffect, useState } from 'react';
 import { ThemeContext, type Theme } from './theme-context';
 
 const STORAGE_KEY = 'theme';
-const DEFAULT: Theme = 'dark';
 
+/** The visitor's system appearance; light when it can't be read. */
+function systemTheme(): Theme {
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+// A saved choice wins; otherwise follow the system, like an Apple site.
 function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    return stored === 'dark' || stored === 'light' ? stored : DEFAULT;
+    return stored === 'dark' || stored === 'light' ? stored : systemTheme();
   } catch {
-    return DEFAULT;
+    return systemTheme();
   }
 }
 

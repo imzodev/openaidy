@@ -14,18 +14,17 @@
      Fixed height so panels below know exactly where to anchor. */
   .story-text {
     position: sticky;
-    top: 64px;
+    top: 52px;
     z-index: 5;
     height: 175px;
     padding: 1.25rem 0 1rem;
     background: linear-gradient(
       to bottom,
-      var(--bg-primary) 80%,
+      var(--bg) 80%,
       transparent 100%
     );
     overflow: hidden;
   }
-  .story-stepper { display: none; }
   .story-chapter { max-width: 600px; }
   .story-chapter h3 {
     font-size: 1.4rem;

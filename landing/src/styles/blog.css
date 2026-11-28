@@ -61,7 +61,7 @@
 
 .blog-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 122, 255, 0.12);
 }
 
 .blog-card-cover-link {
@@ -82,8 +82,10 @@
   text-transform: uppercase;
   padding: 4px 10px;
   border-radius: 100px;
-  border: 1px solid currentColor;
-  background: rgba(0, 0, 0, 0.35);
+  /* Glass chip: readable on any cover color. */
+  color: #fff;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  background: rgb(0 0 0 / 0.28);
   backdrop-filter: blur(8px);
 }
 
@@ -259,7 +261,7 @@
 .post-body a {
   color: var(--accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+  border-bottom: 1px solid rgba(0, 122, 255, 0.3);
   transition: border-color 0.15s;
 }
 .post-body a:hover { border-color: var(--accent); }

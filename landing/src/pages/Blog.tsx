@@ -12,13 +12,6 @@ function formatDate(iso: string) {
   });
 }
 
-const categoryColor: Record<string, string> = {
-  Announcement: '#6366f1',
-  Tutorial: '#10b981',
-  'Deep Dive': '#f59e0b',
-  Roadmap: '#8b5cf6',
-};
-
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 const fadeUp = {
@@ -91,7 +84,6 @@ export default function Blog() {
       <section className="blog-grid-section">
         <div className="blog-grid">
           {blogPosts.map((post, i) => {
-            const accent = categoryColor[post.category] ?? '#6366f1';
             return (
               <motion.article
                 key={post.slug}
@@ -112,12 +104,7 @@ export default function Blog() {
                     className="blog-card-cover"
                     style={{ background: post.coverGradient }}
                   >
-                    <span
-                      className="blog-card-category"
-                      style={{ color: accent, borderColor: accent }}
-                    >
-                      {post.category}
-                    </span>
+                    <span className="blog-card-category">{post.category}</span>
                   </div>
                 </Link>
 

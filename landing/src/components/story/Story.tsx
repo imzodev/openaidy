@@ -56,18 +56,6 @@ export function Story() {
 
       <div ref={storyRef} className="story-container">
         <div className="story-text">
-          {!isMobile && (
-            <div className="story-stepper" aria-hidden="true">
-              <div className="story-step-line" />
-              {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className={`story-step-dot ${activeChapter >= i ? 'story-step-dot--filled' : ''} ${activeChapter === i ? 'story-step-dot--active' : ''}`}
-                />
-              ))}
-            </div>
-          )}
-
           {!isMobile &&
             CHAPTERS.map((ch, i) => (
               <motion.div

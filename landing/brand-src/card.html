@@ -1,0 +1,88 @@
+<!doctype html>
+<!--
+  Source for Aidy's social images. Render with a headless browser at the
+  size in the query string and screenshot the viewport:
+    og:     card.html?w=1200&h=630&kicker=Aidy&title=Your%20AI%20team.&accent=On%20your%20terms.
+    banner: card.html?w=1600&h=640&layout=banner
+    touch:  card.html?w=180&h=180&layout=icon
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  html, body, #root { width: var(--w); height: var(--h); overflow: hidden; }
+  body {
+    font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+    background: #ffffff;
+    color: #1d1d1f;
+    letter-spacing: -0.03em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 72px 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background:
+      radial-gradient(900px 520px at 100% 0%, rgb(90 200 250 / 0.18), transparent 60%),
+      radial-gradient(700px 480px at 0% 100%, rgb(88 86 214 / 0.10), transparent 60%),
+      #fbfbfd;
+  }
+  .brand { display: flex; align-items: center; gap: 18px; font-size: 40px; font-weight: 600; }
+  .brand img { width: 64px; height: 64px; border-radius: 22%; box-shadow: 0 10px 24px rgb(0 122 255 / 0.28); }
+  .kicker { font-size: 28px; font-weight: 600; color: #007aff; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .title { font-size: 84px; line-height: 1.02; font-weight: 700; letter-spacing: -0.045em; }
+  .accent {
+    background: linear-gradient(135deg, #5ac8fa 0%, #007aff 55%, #5856d6 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .url { font-size: 26px; color: #6e6e73; font-weight: 500; letter-spacing: -0.01em; }
+  .row { display: flex; justify-content: space-between; align-items: flex-end; }
+
+  /* Wide README banner: mark + name + tagline, centered. */
+  .banner { align-items: center; justify-content: center; text-align: center; gap: 26px; }
+  .banner .brand { flex-direction: column; gap: 26px; font-size: 96px; font-weight: 700; letter-spacing: -0.045em; }
+  .banner .brand img { width: 150px; height: 150px; box-shadow: 0 24px 50px rgb(0 122 255 / 0.3); }
+  .banner .tagline { font-size: 38px; color: #6e6e73; font-weight: 500; letter-spacing: -0.02em; }
+
+  /* App icon for apple-touch-icon: the mark edge to edge (iOS rounds it). */
+  .icon { padding: 0; background: linear-gradient(170deg, #5ac8fa, #007aff); }
+  .icon img { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const w = q.get('w') || 1200, h = q.get('h') || 630;
+  document.documentElement.style.setProperty('--w', w + 'px');
+  document.documentElement.style.setProperty('--h', h + 'px');
+  const mark = '../public/brand/mark.svg';
+  const layout = q.get('layout') || 'og';
+  const root = document.getElementById('root');
+  if (layout === 'icon') {
+    root.innerHTML = `<div class="card icon"><img src="${mark}" alt=""></div>`;
+  } else if (layout === 'banner') {
+    root.innerHTML = `<div class="card banner">
+      <div class="brand"><img src="${mark}" alt="">Aidy</div>
+      <div class="tagline">Your self-hosted AI team. Open source, any model.</div>
+    </div>`;
+  } else {
+    const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+    root.innerHTML = `<div class="card">
+      <div class="brand"><img src="${mark}" alt="">Aidy</div>
+      <div>
+        <div class="kicker">${esc(q.get('kicker') || 'Aidy')}</div>
+        <div class="title">${esc(q.get('title') || 'Your AI team.')}<br><span class="accent">${esc(q.get('accent') || 'On your terms.')}</span></div>
+      </div>
+      <div class="row"><span class="url">aidyagent.app</span></div>
+    </div>`;
+  }
+</script>
+</body>
+</html>

@@ -1,142 +1,62 @@
-import { useEffect, useRef, useState } from 'react';
-import { motion, useTransform, useScroll } from 'framer-motion';
-import { Terminal, Check } from 'lucide-react';
-import { TypewriterText } from '../ui';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ChevronRight, Github } from 'lucide-react';
+import { ProductShot } from './ProductShot';
 
-const INSTALL_COMMANDS = {
-  windows: 'iex (irm https://aidyagent.app/install.ps1)',
-  unix: 'curl -fsSL https://aidyagent.app/install.sh | bash',
-} as const;
-
-const TITLE_PHRASES = [
-  'do the work',
-  'remember everything',
-  'connect anywhere',
-  'extend themselves',
-  'run on your terms',
-];
+const ease = [0.25, 0.1, 0.25, 1] as const;
 
 export function Hero() {
-  const heroRef = useRef(null);
-  const [typeStarted, setTypeStarted] = useState(false);
-  const [bannerLoaded, setBannerLoaded] = useState(false);
-  const [installTab, setInstallTab] = useState<'windows' | 'unix'>('windows');
-  const [copied, setCopied] = useState(false);
-
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ['start start', 'end start'],
-  });
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
-  const heroScale = useTransform(scrollYProgress, [0, 0.7], [1, 0.93]);
-  const bannerY = useTransform(scrollYProgress, [0, 1], ['0%', '28%']);
-
-  useEffect(() => {
-    const t = setTimeout(() => setTypeStarted(true), 1800);
-    return () => clearTimeout(t);
-  }, []);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(INSTALL_COMMANDS[installTab]);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const reduce = useReducedMotion();
+  const enter = (delay: number) =>
+    reduce
+      ? {}
+      : {
+          initial: { opacity: 0, y: 20 },
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0.8, delay, ease },
+        };
 
   return (
-    <motion.section
-      ref={heroRef}
-      className="hero"
-      style={{ opacity: heroOpacity, scale: heroScale }}
-    >
-      <motion.p
-        className="hero-eyebrow"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.15, ease: 'easeOut' }}
-      >
-        Aidy · Open AI · Do-It-Yourself
+    <section className="hero">
+      <motion.p className="hero-eyebrow" {...enter(0.05)}>
+        Aidy
       </motion.p>
-
-      <motion.h1
-        className="hero-title"
-        initial={{ opacity: 0, y: 35 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <span className="hero-title-line">Build agents that actually</span>
-        <span className="hero-title-line hero-title-anim">
-          <TypewriterText
-            phrases={TITLE_PHRASES}
-            start={typeStarted}
-            className="gradient-text"
-          />
-        </span>
+      <motion.h1 className="hero-title" {...enter(0.12)}>
+        Your AI team.
+        <br />
+        <span className="gradient-text">On your terms.</span>
       </motion.h1>
-
-      <motion.p
-        className="hero-subtitle"
-        initial={{ opacity: 0, y: 25 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.7, ease: 'easeOut' }}
-      >
-        Build AI agents that remember, connect everywhere, and extend with
-        plugins. Self-hosted and open-source.
+      <motion.p className="hero-subtitle" {...enter(0.22)}>
+        Always-on agents that do the work, learn how you like it, and reach you
+        on WhatsApp. Self-hosted, open source, any model.
       </motion.p>
-
-      <motion.div
-        className="hero-install"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 1.1, ease: 'easeOut' }}
-      >
-        <div className="hero-install-tabs">
-          <button
-            className={`hero-install-tab ${installTab === 'windows' ? 'hero-install-tab--active' : ''}`}
-            onClick={() => setInstallTab('windows')}
-          >
-            Windows
-          </button>
-          <button
-            className={`hero-install-tab ${installTab === 'unix' ? 'hero-install-tab--active' : ''}`}
-            onClick={() => setInstallTab('unix')}
-          >
-            macOS / Linux
-          </button>
-        </div>
-        <div className="hero-install-code">
-          <Terminal size={14} className="hero-install-icon" />
-          <code>{INSTALL_COMMANDS[installTab]}</code>
-          <button
-            className="hero-install-copy"
-            onClick={handleCopy}
-            aria-label="Copy to clipboard"
-          >
-            {copied ? <Check size={14} /> : 'Copy'}
-          </button>
-        </div>
-        <p className="hero-install-note">
-          Installs Git, Node.js, pnpm, and builds the project automatically.
-        </p>
+      <motion.div className="hero-actions" {...enter(0.32)}>
+        <a href="#install" className="btn-primary">
+          Install Aidy
+        </a>
+        <a
+          href="https://github.com/imzodev/aidy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="link-chevron"
+        >
+          <Github size={16} style={{ marginRight: 4 }} />
+          View on GitHub
+          <ChevronRight size={16} />
+        </a>
       </motion.div>
 
       <motion.div
-        className="hero-banner"
-        style={{ y: bannerY }}
-        initial={{ opacity: 0, y: 70, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.9, delay: 1.3, ease: [0.16, 1, 0.3, 1] }}
+        className="hero-shot"
+        {...(reduce
+          ? {}
+          : {
+              initial: { opacity: 0, y: 48, scale: 0.98 },
+              animate: { opacity: 1, y: 0, scale: 1 },
+              transition: { duration: 1.1, delay: 0.45, ease },
+            })}
       >
-        <img
-          src="/banner.png"
-          alt="Aidy platform"
-          onLoad={() => setBannerLoaded(true)}
-          style={{
-            opacity: bannerLoaded ? 1 : 0,
-            transition: 'opacity 0.4s',
-          }}
-        />
-        <div className="banner-glow" />
+        <ProductShot />
       </motion.div>
-    </motion.section>
+    </section>
   );
 }

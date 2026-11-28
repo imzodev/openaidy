@@ -131,7 +131,8 @@ function parseFrontmatter(raw: string): {
   body: string;
 } {
   const meta: Record<string, string> = {};
-  const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  // \r? so files checked out with CRLF (Windows) parse the same.
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (fmMatch) {
     fmMatch[1].split('\n').forEach((line) => {
       const colon = line.indexOf(':');

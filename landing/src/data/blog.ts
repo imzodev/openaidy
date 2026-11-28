@@ -23,7 +23,7 @@ export const blogPosts: BlogPost[] = [
     readTime: '4 min',
     category: 'Announcement',
     coverGradient:
-      'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
+      'linear-gradient(135deg, #5ac8fa 0%, #007aff 55%, #5856d6 100%)',
     content: `
 <p class="post-eyebrow"><strong>Aidy</strong> stands for <strong>O</strong>pen <strong>A</strong>rtificial <strong>I</strong>ntelligence <strong>D</strong>o-It-<strong>Y</strong>ourself — a self-hosted agent platform you run, extend, and own end to end.</p>
 <p>We are thrilled to announce the public launch of Aidy — a fully open source, self-hosted AI agent platform built for developers who want power, flexibility, and ownership.</p>

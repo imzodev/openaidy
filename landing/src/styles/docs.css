@@ -76,7 +76,7 @@
 .docs-sidebar-link--active {
   color: var(--accent) !important;
   border-left-color: var(--accent);
-  background: rgba(99, 102, 241, 0.06);
+  background: rgba(0, 122, 255, 0.06);
   font-weight: 600;
 }
 
@@ -165,7 +165,7 @@
 .doc-body a {
   color: var(--accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+  border-bottom: 1px solid rgba(0, 122, 255, 0.3);
   transition: border-color 0.15s;
 }
 .doc-body a:hover { border-color: var(--accent); }
@@ -203,7 +203,7 @@
   border-left: 3px solid var(--accent);
   margin: 0 0 18px;
   padding: 12px 20px;
-  background: rgba(99, 102, 241, 0.06);
+  background: rgba(0, 122, 255, 0.06);
   border-radius: 0 8px 8px 0;
   font-style: italic;
   color: var(--text-secondary);
@@ -235,7 +235,7 @@
 }
 
 .doc-body tr:hover td {
-  background: rgba(99, 102, 241, 0.03);
+  background: rgba(0, 122, 255, 0.03);
 }
 
 .doc-body hr {
@@ -245,7 +245,7 @@
 }
 
 .doc-body blockquote:has(p strong:contains("Read when")) {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(0, 122, 255, 0.08);
 }
 
 /* ── Prev / Next pager ───────────────────────────────────────── */
@@ -275,7 +275,7 @@
 
 .docs-pager-btn:hover {
   border-color: var(--accent);
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.1);
 }
 
 .docs-pager-btn--next {
@@ -379,11 +379,11 @@
 /* ── Light theme ────────────────────────────────────────────── */
 
 [data-theme="light"] .docs-sidebar-link--active {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(0, 122, 255, 0.08);
 }
 
 [data-theme="light"] .doc-body blockquote {
-  background: rgba(99, 102, 241, 0.06);
+  background: rgba(0, 122, 255, 0.06);
 }
 
 @media (max-width: 768px) {
