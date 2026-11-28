@@ -1,5 +1,7 @@
 import type { BuiltinTool } from '@aidyagent/runtime';
+import { OWNER_MEMORY_AGENT_ID } from '@aidyagent/shared-types';
 import type { MemoryToolDeps } from './index.js';
+import { inCustomerChat } from './scope.js';
 import { memoryDeleteMeta } from '../catalog.js';
 
 export function createMemoryDeleteTool(deps: MemoryToolDeps): BuiltinTool {
@@ -38,7 +40,19 @@ export function createMemoryDeleteTool(deps: MemoryToolDeps): BuiltinTool {
         agentId: scopedAgentId,
       });
 
-      const deleted = await deps.memoriesRepo.delete(id.trim(), scopedAgentId);
+      // A fact about the owner is shared, so any agent the owner is talking
+      // to may forget it when asked; nobody may from a customer chat.
+      const memoryId = id.trim();
+      const inCustomer = await inCustomerChat(deps, ctx.sessionId);
+      const target = await deps.memoriesRepo.findById(memoryId);
+      const isOwnerFact = target?.agentId === OWNER_MEMORY_AGENT_ID;
+      const deleted =
+        isOwnerFact && inCustomer
+          ? false
+          : await deps.memoriesRepo.delete(
+              memoryId,
+              isOwnerFact ? OWNER_MEMORY_AGENT_ID : scopedAgentId,
+            );
 
       log.info('memory_delete completed', { memoryId: id.trim(), deleted });
 

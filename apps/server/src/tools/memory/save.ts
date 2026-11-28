@@ -1,5 +1,7 @@
 import type { BuiltinTool } from '@aidyagent/runtime';
+import { OWNER_MEMORY_AGENT_ID } from '@aidyagent/shared-types';
 import type { MemoryToolDeps } from './index.js';
+import { inCustomerChat } from './scope.js';
 import { memorySaveMeta } from '../catalog.js';
 
 export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
@@ -30,6 +32,12 @@ export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
           description:
             'Integer 1–5. Default 3. Use 5 for critical constraints, 1 for low-priority notes.',
         },
+        scope: {
+          type: 'string',
+          enum: ['agent', 'owner'],
+          description:
+            '"agent" (default): your own notes. "owner": a fact about the owner that every agent should know — use it when the owner explicitly asks you to remember or correct something about them.',
+        },
       },
       required: ['title', 'content'],
     },
@@ -39,6 +47,7 @@ export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
       const content = args['content'] as string;
       const tags = args['tags'] as string[] | undefined;
       const importance = args['importance'] as number | undefined;
+      const scope = args['scope'] ?? 'agent';
 
       if (typeof title !== 'string' || !title.trim()) {
         return {
@@ -62,13 +71,24 @@ export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
         };
       }
 
+      if (scope !== 'agent' && scope !== 'owner') {
+        return { ok: false, error: 'scope must be "agent" or "owner"' };
+      }
+      if (scope === 'owner' && (await inCustomerChat(deps, ctx.sessionId))) {
+        return {
+          ok: false,
+          error:
+            'Facts about the owner can only be saved in a conversation with the owner, not with a customer.',
+        };
+      }
+
       log.info('memory_save invoked', {
         agentId: ctx.agentId,
         title: title.trim(),
       });
 
       const memory = await deps.memoriesRepo.create({
-        agentId: ctx.agentId,
+        agentId: scope === 'owner' ? OWNER_MEMORY_AGENT_ID : ctx.agentId,
         title: title.trim(),
         content: content.trim(),
         tags: tags ?? [],

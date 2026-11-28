@@ -2019,6 +2019,25 @@ export async function updateMemory(
 }
 
 /**
+ * Forget everything learned about the owner from conversations. Memories
+ * the owner or an agent wrote on purpose are kept. Returns how many went.
+ */
+export async function forgetLearnedMemories(): Promise<number> {
+  const response = await apiFetch(`${API_BASE}/api/memories/learned`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to forget learned memories: ${response.statusText}`,
+    );
+  }
+  const body = (await response.json()) as { deleted: number };
+  return body.deleted;
+}
+
+/**
  * Delete a memory by ID.
  */
 export async function deleteMemory(id: string): Promise<void> {

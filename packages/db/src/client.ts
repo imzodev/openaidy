@@ -850,6 +850,30 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       sqlite.exec(`ALTER TABLE workflow_runs ADD COLUMN ${column} TEXT`);
     }
   }
+
+  // Migration: learned memory about the owner. `source` tells learned facts
+  // apart from agent-saved and user-written ones; the cursor table records
+  // how far each conversation has been read so nothing is learned twice.
+  const memoryInfo = sqlite.pragma('table_info(memories)') as Array<{
+    name: string;
+  }>;
+  if (!memoryInfo.some((col) => col.name === 'source')) {
+    sqlite.exec(
+      `ALTER TABLE memories ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'`,
+    );
+  }
+  for (const column of ['kind', 'source_session_id']) {
+    if (!memoryInfo.some((col) => col.name === column)) {
+      sqlite.exec(`ALTER TABLE memories ADD COLUMN ${column} TEXT`);
+    }
+  }
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS memory_learning_state (
+      session_id        TEXT PRIMARY KEY NOT NULL,
+      through_sequence  INTEGER NOT NULL,
+      updated_at        TEXT NOT NULL
+    )
+  `);
 }
 
 export async function createDatabaseClient(

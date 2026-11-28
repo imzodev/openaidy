@@ -1,5 +1,6 @@
 import type { BuiltinTool } from '@aidyagent/runtime';
 import type { MemoryToolDeps } from './index.js';
+import { inCustomerChat } from './scope.js';
 import { memorySearchMeta } from '../catalog.js';
 
 export function createMemorySearchTool(deps: MemoryToolDeps): BuiltinTool {
@@ -50,6 +51,7 @@ export function createMemorySearchTool(deps: MemoryToolDeps): BuiltinTool {
         query.trim(),
         scopedAgentId,
         limit ?? 10,
+        !(await inCustomerChat(deps, ctx.sessionId)),
       );
 
       log.info('memory_search completed', { query, found: results.length });

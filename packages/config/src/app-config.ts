@@ -455,6 +455,13 @@ export const ownerConfigSchema = z.object({
       agentId: z.string().optional(),
     })
     .optional(),
+  /** What Aidy learns about the owner from their conversations. */
+  memory: z
+    .object({
+      /** Learn preferences and facts in the background (on unless set false). */
+      learn: z.boolean().default(true),
+    })
+    .optional(),
 });
 
 export type OwnerConfig = z.infer<typeof ownerConfigSchema>;
