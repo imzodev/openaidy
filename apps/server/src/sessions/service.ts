@@ -105,6 +105,7 @@ import type {
 import {
   buildDynamicContextBlock,
   buildSystemPrompt,
+  ownerMemoriesAllowed,
 } from '../prompts/build-system-prompt';
 import type { AddonPromptSummary } from '../prompts/build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
@@ -253,6 +254,9 @@ export class SessionMessageService {
   private readonly getPromptContext:
     | SessionMessageServiceOptions['getPromptContext']
     | undefined;
+  private readonly listOwnerMemories:
+    | SessionMessageServiceOptions['listOwnerMemories']
+    | undefined;
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
   private readonly maxToolOutputChars: number;
@@ -292,6 +296,7 @@ export class SessionMessageService {
     this.listAddons = options.listAddons;
     this.attachments = options.attachments;
     this.getPromptContext = options.getPromptContext;
+    this.listOwnerMemories = options.listOwnerMemories;
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
@@ -338,6 +343,26 @@ export class SessionMessageService {
       ? (requested as ReasoningEffort)
       : agentDefault;
     return clampReasoningEffort(resolveReasoningSupport(modelId), choice);
+  }
+
+  /**
+   * The owner's memories for [ABOUT_THE_OWNER], or none when the
+   * conversation is with a customer — the owner's private details must
+   * never reach a customer chat.
+   */
+  private async resolveOwnerMemories(
+    context: import('../prompts/build-system-prompt').PromptContext,
+  ): Promise<import('@aidyagent/shared-types').Memory[]> {
+    if (!this.listOwnerMemories || !ownerMemoriesAllowed(context)) return [];
+    try {
+      return await this.listOwnerMemories();
+    } catch (err) {
+      this.logger?.warn(
+        { err },
+        'Could not load what is known about the owner',
+      );
+      return [];
+    }
   }
 
   /**
@@ -1163,6 +1188,7 @@ export class SessionMessageService {
         | SessionType
         | undefined,
       context: promptContext,
+      ownerMemories: await this.resolveOwnerMemories(promptContext),
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -1356,6 +1382,7 @@ export class SessionMessageService {
         role: 'user',
         content,
         agentId,
+        origin: 'agent',
         onStreamEvent: () => {},
       });
       if (depth > 0) {
@@ -1422,6 +1449,9 @@ export class SessionMessageService {
       sessionId: input.sessionId,
       role: input.role,
       content: input.content,
+      ...(input.origin !== undefined && {
+        metadata: { origin: input.origin },
+      }),
     });
 
     // Link any pending uploads to the persisted user message so they show
@@ -1810,6 +1840,7 @@ export class SessionMessageService {
         | SessionType
         | undefined,
       onboardingMessagesRemaining,
+      ownerMemories: await this.resolveOwnerMemories(promptContext),
     });
 
     // The deferred index lists every MCP tool, loaded or not, so it stays

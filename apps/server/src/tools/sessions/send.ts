@@ -67,12 +67,14 @@ export function createSessionsSendTool(deps: SessionsToolDeps): BuiltinTool {
               role: 'user',
               content: content.trim(),
               agentId,
+              origin: 'agent',
               onStreamEvent: () => {},
             })
           : sessionService.submitMessageStreaming({
               sessionId: sessionId.trim(),
               role: 'user',
               content: content.trim(),
+              origin: 'agent',
               onStreamEvent: () => {},
             });
         void dispatchPromise.catch((_err: unknown) => {

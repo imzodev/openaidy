@@ -242,6 +242,7 @@ async function executePulseJob(
 
     const result = await sessionMessageService.submitMessageStreaming({
       ...messageInput,
+      origin: 'scheduler',
       onStreamEvent: () => {},
     });
     if (!result.ok) {
@@ -269,6 +270,7 @@ async function executePulseJob(
     sessionId: newSession.id,
     role: 'user',
     content,
+    origin: 'scheduler',
     onStreamEvent: () => {},
   };
   const agentId = job.payload.agentId as string | undefined;

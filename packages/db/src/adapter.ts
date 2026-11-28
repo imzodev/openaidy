@@ -21,6 +21,7 @@ import { createWorkflowTriggersRepository } from './repositories/workflow-trigge
 import { createSessionChannelsRepository } from './repositories/session-channels';
 import { createAddonsRepository } from './repositories/addons';
 import { createMemoriesRepository } from './repositories/memories';
+import { createMemoryLearningStateRepository } from './repositories/memory-learning-state';
 import { createDeliverablesRepository } from './repositories/deliverables';
 
 export type { DatabaseAdapter, DatabaseRepositories } from './types';
@@ -51,6 +52,7 @@ export async function createDatabaseAdapter(
     sessionChannels: createSessionChannelsRepository(client),
     addons: createAddonsRepository(client),
     memories: createMemoriesRepository(client),
+    memoryLearningState: createMemoryLearningStateRepository(client),
     deliverables: createDeliverablesRepository(client),
   };
 

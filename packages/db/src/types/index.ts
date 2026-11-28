@@ -19,6 +19,7 @@ import type { SubtasksRepository } from '../repositories/subtasks';
 import type { TaskAgentsRepository } from '../repositories/task-agents';
 import type { AddonsRepository } from '../repositories/addons';
 import type { MemoriesRepository } from '../repositories/memories';
+import type { MemoryLearningStateRepository } from '../repositories/memory-learning-state';
 import type { DeliverablesRepository } from '../repositories/deliverables';
 import type { TaskSchedulesRepository } from '../repositories/task-schedules';
 import type { TaskExecutionHistoryRepository } from '../repositories/task-execution-history';
@@ -256,6 +257,7 @@ export type WorkflowTriggersStore = WorkflowTriggersRepository;
 export type SessionChannelsStore = SessionChannelsRepository;
 export type AddonsStore = AddonsRepository;
 export type MemoriesStore = MemoriesRepository;
+export type MemoryLearningStateStore = MemoryLearningStateRepository;
 export type DeliverablesStore = DeliverablesRepository;
 
 export type DatabaseRepositories = {
@@ -278,6 +280,7 @@ export type DatabaseRepositories = {
   sessionChannels: SessionChannelsStore;
   addons: AddonsStore;
   memories: MemoriesStore;
+  memoryLearningState: MemoryLearningStateStore;
   deliverables: DeliverablesStore;
 };
 

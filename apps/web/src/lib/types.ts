@@ -398,6 +398,8 @@ export type OwnerConfig = {
     instructions?: string;
     agentId?: string;
   };
+  /** Background learning about the owner (on unless learn is false). */
+  memory?: { learn: boolean };
 };
 
 /**

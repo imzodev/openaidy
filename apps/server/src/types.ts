@@ -267,3 +267,24 @@ export type AppServices = {
   channels: ChannelRegistry;
   taskSchedules: TaskScheduleService | undefined;
 };
+
+/** The model call background memory learning makes. */
+export type MemoryLearningComplete = (
+  request: { system: string; user: string; maxTokens: number },
+  model: { providerId: string; modelId: string },
+) => Promise<{ ok: true; text: string } | { ok: false; error: string }>;
+
+export type MemoryLearningServiceDeps = {
+  memories: import('@aidyagent/db').MemoriesStore;
+  learningState: import('@aidyagent/db').MemoryLearningStateStore;
+  sessionMessages: import('@aidyagent/db').SessionMessagesStore;
+  sessionRuns: import('@aidyagent/db').SessionRunsStore;
+  /** Owner config says learning is on. */
+  isEnabled: () => boolean;
+  /** The session is a chat with a customer, not with the owner. */
+  isCustomerSession: (sessionId: string) => Promise<boolean>;
+  complete: MemoryLearningComplete;
+  logger: ReturnType<typeof import('./lib/logger').createLogger>;
+  /** For tests. */
+  now?: () => Date;
+};
